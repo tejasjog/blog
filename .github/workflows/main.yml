@@ -18,7 +18,7 @@ jobs:
       - name: Checkout Code from GitLab
         uses: actions/checkout@v4
         with:
-          repository: 'tejasjog/tejasjog-blog' # ⚠️ REPLACE with your 'gitlab-group/gitlab-repo-name'
+          repository: 'https://gitlab.com/tejasjog/blog.git' # ⚠️ REPLACE with your 'gitlab-group/gitlab-repo-name'
           token: ${{ secrets.GITLAB_ACCESS_TOKEN }}
           # The fetch-depth: 0 is crucial for Hugo's .GitInfo and submodules
           fetch-depth: 0
