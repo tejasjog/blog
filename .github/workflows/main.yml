@@ -62,4 +62,4 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           projectName: 'tejasjog-blog'
           directory: 'blog/public-cf' 
-          branch: ${{ github.ref_name }}
+          branch: 'master'
