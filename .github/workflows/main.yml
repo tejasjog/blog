@@ -1,0 +1,68 @@
+name: Deploy Hugo Blog from GitLab to Cloudflare Pages
+
+# This workflow runs when changes are pushed to the main branch of THIS GitHub repo.
+# However, you will manually run it after pushing changes to your GitLab repo.
+on:
+  workflow_dispatch:
+  # Optional: Automatically trigger if you enable pull mirroring from GitLab to this GitHub repo
+  # push:
+  #   branches:
+  #     - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. Checkout the Code from GitLab
+      - name: Checkout Code from GitLab
+        uses: actions/checkout@v4
+        with:
+          repository: 'tejasjog/tejasjog-blog' # ⚠️ REPLACE with your 'gitlab-group/gitlab-repo-name'
+          token: ${{ secrets.GITLAB_ACCESS_TOKEN }}
+          # The fetch-depth: 0 is crucial for Hugo's .GitInfo and submodules
+          fetch-depth: 0
+          submodules: true
+
+      # 2. Setup Node.js (Required for npm install and Wrangler)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x' # Matches your desired NODE_VERSION
+
+      # 3. Cache Node Modules (Optional: Speeds up subsequent builds)
+      - name: Cache Node Modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+
+      # 4. Install Node.js Dependencies (e.g., Wrangler CLI, Tailwind/PostCSS)
+      - name: Install Node Dependencies
+        run: npm ci
+
+      # 5. Build Hugo Site (Custom Logic from your YAML)
+      - name: Build Hugo Site
+        run: |
+          # ⚠️ Use HUGO_VERSION for GitHub to auto-install the correct extended version
+          HUGO_VERSION=${{ vars.HUGO_VERSION || '0.148.0' }} 
+          npm install -g hugo-cli
+          # Cloudflare build URL is not automatically available, use your CI variable
+          hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog-blog.pages.dev/' }} --destination public-cf
+        env:
+          HUGO_VERSION: 0.148.0 # Set this as a Variable in GitHub Actions if you want it configurable
+          
+      # 6. Install Wrangler (Required for deployment)
+      - name: Install Wrangler
+        run: npm install -g wrangler
+
+      # 7. Deploy to Cloudflare Pages
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: 'tejasjog-blog' # ⚠️ REPLACE with your CLOUDFLARE_PROJECT_NAME
+          directory: 'public-cf'
+          # Use the branch that triggered the action for preview/production separation
+          branch: ${{ github.ref_name }}
