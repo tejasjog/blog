@@ -19,6 +19,8 @@ jobs:
       # 2. Run Submodule Update (Must run after the folder is created)
       - name: Update Submodules
         run: git submodule update --init --recursive
+        # ✅ working-directory: blog is now safe, as 'blog' was created in Step 1
+        working-directory: blog 
 
       # 3. Setup Node.js 
       - name: Setup Node.js
