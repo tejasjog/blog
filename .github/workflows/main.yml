@@ -16,11 +16,15 @@ jobs:
           # Clone the repository. This creates the 'blog' folder in the runner's root.
           git clone https://oauth2:$GITLAB_TOKEN@gitlab.com/tejasjog/blog.git
 
-      # 2. Run Submodule Update (Must run after the folder is created)
-      - name: Update Submodules
-        run: git submodule update --init --recursive
-        # ✅ working-directory: blog is now safe, as 'blog' was created in Step 1
-        working-directory: blog 
+      # 2. Run Submodule Update and Checkout
+      - name: Update and Checkout Submodules
+        run: |
+          # The clone in step 1 creates the 'blog' directory.
+          # The following updates all submodules and checks out their content.
+          git submodule update --init --recursive
+          # Ensure all content is checked out (mostly redundant, but ensures robustness)
+          git submodule foreach git checkout .
+        working-directory: blog
 
       # 3. Setup Node.js 
       - name: Setup Node.js
