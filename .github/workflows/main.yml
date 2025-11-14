@@ -56,7 +56,7 @@ jobs:
 
       # 8. Deploy to Cloudflare Pages
       - name: Deploy to Cloudflare Pages
-        uses: clcloudflare/pages-action@v1 # <--- USE THE PAGES-ACTION
+        uses: cloudflare/pages-action@v1 # <--- USE THE PAGES-ACTION
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
