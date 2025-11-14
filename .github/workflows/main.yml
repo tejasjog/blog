@@ -7,6 +7,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    env:
+      DART_SASS_VERSION: 1.77.4 # Define the Dart Sass version globally for the job
+
     steps:
     # 1. Checkout Code from GitLab (Using SSH or Token to handle submodules)
     # We combine the clone and setup steps for better access control.
@@ -35,13 +38,40 @@ jobs:
         # 2a. Update/initialize all submodules. This now uses the authenticated URL.
         git submodule update --init --recursive --force
   
-        # 2b. CRITICAL: Remove the hidden .git directories from content submodules.
-        # This command finds all .git directories nested within content/posts and removes them.
-        # This ensures content is processed by Hugo.
+        # 2b. CRITICAL FIX: Remove the hidden .git directories from content submodules.
+        # Using -depth ensures reliable removal, which is necessary for Hugo to process the content.
+        # The 'themes/PaperMod' submodule is excluded as it needs its .git directory.
         find content/posts -depth -name .git -exec rm -rf {} \;
         
         echo "Cleanup complete. Content submodules now look like regular folders."
   
+    
+    # NEW STEP: Install System Dependencies (Brotli and Dart Sass)
+    - name: Install Brotli and Dart Sass
+      # This step must run in the root of the runner before Node.js setup
+      run: |
+        echo "Installing system dependencies: brotli and Dart Sass..."
+        
+        # Install brotli
+        sudo apt-get update
+        sudo apt-get install -y brotli
+        
+        # Install Dart Sass
+        # Note: We use the DART_SASS_VERSION environment variable defined above.
+        DART_SASS_FILENAME="dart-sass-${{ env.DART_SASS_VERSION }}-linux-x64.tar.gz"
+        curl -LJO https://github.com/sass/dart-sass/releases/download/${{ env.DART_SASS_VERSION }}/$DART_SASS_FILENAME
+        tar -xf $DART_SASS_FILENAME
+        
+        # Move the executables to a standard PATH location
+        sudo cp -r dart-sass/* /usr/local/bin/
+        
+        # Clean up downloaded files
+        rm -rf dart-sass*
+        
+        # The /usr/local/bin is already in the system PATH, so an explicit export is not necessary 
+        # for subsequent steps in the same job, but we'll confirm the files are there.
+        echo "Dart Sass installed to /usr/local/bin"
+        
     # 3. Setup Node.js 
     - name: Setup Node.js
       uses: actions/setup-node@v4
