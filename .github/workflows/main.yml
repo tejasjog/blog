@@ -81,9 +81,11 @@ jobs:
         # Install Node.js
         sudo curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION} | bash -
         sudo apt-get install -y nodejs
-    
-        # Install Node.js dependencies
-        sudo "[[ -f package-lock.json || -f npm-shrinkwrap.json ]] && npm ci || true"
+
+    # 5. Install Node Dependencies (npm install)
+    - name: Install Node Dependencies
+      run: npm ci
+      working-directory: blog 
         
     # 6B. Build Hugo Site
     - name: Build Hugo Site
