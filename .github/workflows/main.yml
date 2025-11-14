@@ -42,7 +42,7 @@ jobs:
           
       # 4. Install Node Dependencies (npm ci)
       - name: Install Node Dependencies
-        run: npm ci
+        run: npm install
         # 🛠️ FIX 4: Use working-directory to ensure npm ci runs where package-lock.json is
         working-directory: blog 
 
