@@ -15,15 +15,20 @@ jobs:
         run: |
           # Clone the repository. This creates the 'blog' folder in the runner's root.
           git clone https://oauth2:$GITLAB_TOKEN@gitlab.com/tejasjog/blog.git
-
-      # 2. Run Submodule Update and Checkout
-      - name: Update and Checkout Submodules
+          
+      # 2. Run Submodule Update and Cleanup .git files
+      - name: Update Submodules and Cleanup Content Directories
         run: |
-          # The clone in step 1 creates the 'blog' directory.
-          # The following updates all submodules and checks out their content.
+          # 1. Update/initialize all submodules to check out content
           git submodule update --init --recursive
-          # Ensure all content is checked out (mostly redundant, but ensures robustness)
-          git submodule foreach git checkout .
+          
+          # 2. CRITICAL: Remove the hidden .git directories from content submodules.
+          #    Hugo is sometimes confused when content directories are also .git repos.
+          #    The 'themes/PaperMod' submodule is excluded as it needs its .git directory.
+          find content/posts -name ".git" -type d -exec rm -rf {} +
+          
+          echo "Cleanup complete. Content submodules now look like regular folders."
+
         working-directory: blog
 
       # 3. Setup Node.js 
