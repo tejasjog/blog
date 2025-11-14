@@ -84,7 +84,7 @@ jobs:
 
     # 5. Install Node Dependencies (npm install)
     - name: Install Node Dependencies
-      run: npm ci
+      run: npm install
       working-directory: blog 
         
     # 6B. Build Hugo Site
