@@ -1,10 +1,8 @@
 name: Deploy Hugo Blog from GitLab to Cloudflare Pages
 
-# This workflow runs when changes are pushed to the main branch of THIS GitHub repo.
-# However, you will manually run it after pushing changes to your GitLab repo.
+# This workflow runs when changes are manually triggered or pushed to the main branch
 on:
   workflow_dispatch:
-  # Optional: Automatically trigger if you enable pull mirroring from GitLab to this GitHub repo
   # push:
   #   branches:
   #     - main
@@ -14,26 +12,38 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      # 1. Checkout the Code from GitLab
-      - name: Checkout Code from GitLab
-        uses: actions/checkout@v4
-        with:
-          repository: 'https://gitlab.com/tejasjog/blog.git' # ⚠️ REPLACE with your 'gitlab-group/gitlab-repo-name'
-          token: ${{ secrets.GITLAB_ACCESS_TOKEN }}
-          # The fetch-depth: 0 is crucial for Hugo's .GitInfo and submodules
-          fetch-depth: 0
-          submodules: true
+      # 1. 🛠️ NEW: Clone the Code from GitLab using the git clone command
+      #    This securely uses your stored GitLab Access Token (PAT)
+      - name: Clone Code from GitLab
+        env:
+          # Pass the GitHub Secret as an environment variable
+          GITLAB_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }} 
+        run: |
+          # 1a. Clone the repository using the PAT for authentication
+          # Format: https://oauth2:${TOKEN}@gitlab.com/owner/repo.git
+          git clone https://oauth2:$GITLAB_TOKEN@gitlab.com/tejasjog/blog.git
+          
+          # 1b. Move into the cloned directory for subsequent steps
+          # The clone command creates a directory named 'blog'
+          cd blog
+          
+          # 1c. Set fetch-depth to 0 and pull submodules if needed (Hugo often requires this)
+          # Note: The cd command above is active for this entire run block
+          git fetch --unshallow || true
+          git submodule update --init --recursive
 
       # 2. Setup Node.js (Required for npm install and Wrangler)
+      #    The working directory is now inside the cloned 'blog' repo.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22.x' # Matches your desired NODE_VERSION
+          node-version: '22.x'
 
       # 3. Cache Node Modules (Optional: Speeds up subsequent builds)
       - name: Cache Node Modules
         uses: actions/cache@v4
         with:
+          # Path is now relative to the 'blog' directory
           path: node_modules
           key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
 
@@ -50,9 +60,10 @@ jobs:
           # Cloudflare build URL is not automatically available, use your CI variable
           hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog-blog.pages.dev/' }} --destination public-cf
         env:
-          HUGO_VERSION: 0.148.0 # Set this as a Variable in GitHub Actions if you want it configurable
+          HUGO_VERSION: 0.148.0 
           
       # 6. Install Wrangler (Required for deployment)
+      #    Wrangler is now installed globally, so the directory change doesn't matter much.
       - name: Install Wrangler
         run: npm install -g wrangler
 
@@ -62,7 +73,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: 'tejasjog-blog' # ⚠️ REPLACE with your CLOUDFLARE_PROJECT_NAME
+          projectName: 'tejasjog-blog'
+          # Directory is relative to the current working directory ('blog')
           directory: 'public-cf'
-          # Use the branch that triggered the action for preview/production separation
           branch: ${{ github.ref_name }}
