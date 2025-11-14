@@ -8,42 +8,39 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      # 1. Clone the Code from GitLab
-      - name: Clone Code from GitLab and Setup Directory
+      # 1. Clone the Code from GitLab (Only Clone in this step)
+      - name: Clone Code from GitLab
         env:
           GITLAB_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }} 
         run: |
           # Clone the repository. This creates the 'blog' folder in the runner's root.
           git clone https://oauth2:$GITLAB_TOKEN@gitlab.com/tejasjog/blog.git
-          
-          # ⚠️ FIX: REMOVED 'cd blog'
 
-          # Run submodule update from the root, targeting the 'blog' folder
-          git submodule update --init --recursive
-        working-directory: blog # <-- ADDED: Run submodule update inside 'blog'
+      # 2. Run Submodule Update (Must run after the folder is created)
+      - name: Update Submodules
+        run: git submodule update --init --recursive
+        # ✅ working-directory: blog is now safe, as 'blog' was created in Step 1
+        working-directory: blog 
 
-      # 2. Setup Node.js (Should run before the cache step that uses npm)
+      # 3. Setup Node.js 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22.x'
         
-      # 3. Cache Node Modules
+      # 4. Cache Node Modules
       - name: Cache Node Modules
         uses: actions/cache@v4
         with:
-          # Path must include the cloned directory name
           path: blog/node_modules 
-          # Hash path must include the cloned directory name
           key: ${{ runner.os }}-node-${{ hashFiles('blog/package-lock.json') }}
           
-      # 4. Install Node Dependencies (npm install)
+      # 5. Install Node Dependencies (npm install)
       - name: Install Node Dependencies
         run: npm install
-        # ✅ working-directory: blog now correctly points to the cloned folder
         working-directory: blog 
 
-      # 5. Build Hugo Site 
+      # 6. Build Hugo Site 
       - name: Build Hugo Site
         run: |
           HUGO_VERSION=${{ vars.HUGO_VERSION || '0.148.0' }} 
@@ -53,17 +50,16 @@ jobs:
           HUGO_VERSION: 0.148.0 
         working-directory: blog
           
-      # 6. Install Wrangler (Globally installed)
+      # 7. Install Wrangler (Globally installed)
       - name: Install Wrangler
         run: npm install -g wrangler
 
-      # 7. Deploy to Cloudflare Pages
+      # 8. Deploy to Cloudflare Pages
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           projectName: 'tejasjog-blog'
-          # Directory is relative to the runner's root
           directory: 'blog/public-cf' 
           branch: ${{ github.ref_name }}
