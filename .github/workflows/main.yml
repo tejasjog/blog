@@ -5,70 +5,84 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-    
-    steps:
-      # 1. Clone the Code from GitLab (Only Clone in this step)
-      - name: Clone Code from GitLab
-        env:
-          GITLAB_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }} 
-        run: |
-          # Clone the repository. This creates the 'blog' folder in the runner's root.
-          git clone https://oauth2:$GITLAB_TOKEN@gitlab.com/tejasjog/blog.git
-          
-      # 2. Run Submodule Update and Cleanup .git files
-      - name: Update Submodules and Cleanup Content Directories
-        run: |
-          # 1. Update/initialize all submodules to check out content
-          git submodule update --init --recursive
-          
-          # 2. CRITICAL: Remove the hidden .git directories from content submodules.
-          #    Hugo is sometimes confused when content directories are also .git repos.
-          #    The 'themes/PaperMod' submodule is excluded as it needs its .git directory.
-          find content/posts -name ".git" -type d -exec rm -rf {} +
-          
-          echo "Cleanup complete. Content submodules now look like regular folders."
+  runs-on: ubuntu-latest
 
-        working-directory: blog
+  steps:
+  # 1. Checkout Code from GitLab (Using SSH or Token to handle submodules)
+  # We combine the clone and setup steps for better access control.
+  - name: Checkout Code with Submodule Authentication
+    env:
+      # Use a variable name that Git can easily interpret as a token
+      GIT_OAUTH_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }} 
+    run: |
+      # 1a. Clone the repository first using the token
+      git clone https://oauth2:$GIT_OAUTH_TOKEN@gitlab.com/tejasjog/blog.git
+      
+      # 1b. Change directory to the cloned repo
+      cd blog
+      
+      # 1c. CRITICAL: Configure Git to replace all 'https://gitlab.com' 
+      # URLs in the .gitmodules file with the authenticated token URL.
+      # This ensures that git submodule update succeeds for private repos.
+      git config --global url."https://oauth2:$GIT_OAUTH_TOKEN@gitlab.com".insteadOf "https://gitlab.com"
+      
+  # 2. Run Submodule Update and Cleanup .git files
+  - name: Update Submodules and Cleanup Content Directories
+    # working-directory must be 'blog' now
+    working-directory: blog
+    run: |
+      echo "Attempting to update submodules..."
+      # 2a. Update/initialize all submodules. This now uses the authenticated URL.
+      git submodule update --init --recursive --force
 
-      # 3. Setup Node.js 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22.x'
-        
-      # 4. Cache Node Modules
-      - name: Cache Node Modules
-        uses: actions/cache@v4
-        with:
-          path: /node_modules 
-          key: ${{ runner.os }}-node-${{ hashFiles('blog/package-lock.json') }}
-          
-      # 5. Install Node Dependencies (npm install)
-      - name: Install Node Dependencies
-        run: npm install
-        working-directory: blog 
+      # 2b. CRITICAL: Remove the hidden .git directories from content submodules.
+      # The 'themes/PaperMod' submodule is excluded as it needs its .git directory.
+      find content/posts -name ".git" -type d -exec rm -rf {} +
+      
+      echo "Cleanup complete. Content submodules now look like regular folders."
 
-      # 6. Build Hugo Site 
-      - name: Build Hugo Site
-        run: |
-          HUGO_VERSION=${{ vars.HUGO_VERSION || '0.148.0' }} 
-          npm install -g hugo-cli
-          hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog-blog.pages.dev/' }} --destination public-cf
-        env:
-          HUGO_VERSION: 0.148.0 
-        working-directory: blog
-          
-      # 7. Install Wrangler (Globally installed)
-      - name: Install Wrangler
-        run: npm install -g wrangler
+  # 3. Setup Node.js 
+  - name: Setup Node.js
+    uses: actions/setup-node@v4
+    with:
+      node-version: '22.x'
+      
+  # 4. Cache Node Modules
+  # Note: Caching with /node_modules path is tricky unless using `setup-node`'s built-in caching.
+  # Since we are using an explicit path and key, we use the standard action.
+  - name: Restore Node Cache
+    id: cache-node
+    uses: actions/cache@v4
+    with:
+      path: blog/node_modules # Path is relative to the runner root.
+      key: ${{ runner.os }}-node-${{ hashFiles('blog/package-lock.json') }}
+      
+  # 5. Install Node Dependencies (npm install)
+  - name: Install Node Dependencies
+    run: npm install
+    working-directory: blog 
 
-      # 8. Deploy to Cloudflare Pages
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/pages-action@v1 # <--- USE THE PAGES-ACTION
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: 'tejasjog-blog'
-          directory: 'blog/public-cf' 
-          branch: 'main'
+  # 6. Build Hugo Site 
+  - name: Build Hugo Site
+    run: |
+      HUGO_VERSION=${{ vars.HUGO_VERSION || '0.148.0' }} 
+      npm install -g hugo-cli
+      # NOTE: If hugo-cli isn't found, you might need a separate action for Hugo.
+      hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog-blog.pages.dev/' }} --destination public-cf
+    env:
+      HUGO_VERSION: 0.148.0 
+    working-directory: blog
+      
+  # 7. Install Wrangler (Globally installed)
+  - name: Install Wrangler
+    run: npm install -g wrangler
+
+  # 8. Deploy to Cloudflare Pages
+  - name: Deploy to Cloudflare Pages
+    uses: cloudflare/pages-action@v1 
+    with:
+      apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      projectName: 'tejasjog-blog'
+      directory: 'blog/public-cf' 
+      branch: 'main'
