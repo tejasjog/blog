@@ -73,35 +73,18 @@ jobs:
         # for subsequent steps in the same job, but we'll confirm the files are there.
         echo "Dart Sass installed to /usr/local/bin"
         
-    # 3. Setup Node.js 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '22.x'
-        
-    # 4. Cache Node Modules
-    # Note: Caching with /node_modules path is tricky unless using `setup-node`'s built-in caching.
-    # Since we are using an explicit path and key, we use the standard action.
-    - name: Restore Node Cache
-      id: cache-node
-      uses: actions/cache@v4
-      with:
-        path: blog/node_modules # Path is relative to the runner root.
-        key: ${{ runner.os }}-node-${{ hashFiles('blog/package-lock.json') }}
-        
-    # 5. Install Node Dependencies (npm install)
-    - name: Install Node Dependencies
-      run: npm install
-      working-directory: blog 
-  
-    # 6A. Setup Hugo Extended using the peaceiris action
-    - name: Setup Hugo Extended
-      uses: peaceiris/actions-hugo@v3
-      with:
-        hugo-version: '${{ env.HUGO_VERSION }}' # Uses the version defined in 'env'
-        extended: true # <-- CRITICAL: This flag installs the Extended version
-        working-directory: blog # Ensure this runs in the context of your 'blog' directory
+        # Install Hugo
+        sudo curl -LJO https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb
+        sudo apt-get install -y ./hugo_extended_${HUGO_VERSION}_linux-amd64.deb
+        sudo rm hugo_extended_${HUGO_VERSION}_linux-amd64.deb
+
+        # Install Node.js
+        sudo curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION} | bash -
+        sudo apt-get install -y nodejs
     
+        # Install Node.js dependencies
+        sudo "[[ -f package-lock.json || -f npm-shrinkwrap.json ]] && npm ci || true"
+        
     # 6B. Build Hugo Site
     - name: Build Hugo Site
       run: |
