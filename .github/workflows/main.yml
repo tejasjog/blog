@@ -9,7 +9,8 @@ jobs:
 
     env:
       DART_SASS_VERSION: 1.77.4 # Define the Dart Sass version globally for the job
-
+      HUGO_VERSION: 0.148.0 # <-- Define your desired Hugo version here
+      
     steps:
     # 1. Checkout Code from GitLab (Using SSH or Token to handle submodules)
     # We combine the clone and setup steps for better access control.
@@ -93,17 +94,21 @@ jobs:
       run: npm install
       working-directory: blog 
   
-    # 6. Build Hugo Site 
+    # 6A. Setup Hugo Extended using the peaceiris action
+    - name: Setup Hugo Extended
+      uses: peaceiris/actions-hugo@v3
+      with:
+        hugo-version: '${{ env.HUGO_VERSION }}' # Uses the version defined in 'env'
+        extended: true # <-- CRITICAL: This flag installs the Extended version
+      working-directory: blog # Ensure this runs in the context of your 'blog' directory
+    
+    # 6B. Build Hugo Site
     - name: Build Hugo Site
       run: |
-        HUGO_VERSION=${{ vars.HUGO_VERSION || '0.148.0' }} 
-        npm install -g hugo-cli
-        # NOTE: If hugo-cli isn't found, you might need a separate action for Hugo.
+        # The 'hugo' command is now available on PATH from the previous step.
         hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog-blog.pages.dev/' }} --destination public-cf
-      env:
-        HUGO_VERSION: 0.148.0 
       working-directory: blog
-        
+
     # 7. Install Wrangler (Globally installed)
     - name: Install Wrangler
       run: npm install -g wrangler
