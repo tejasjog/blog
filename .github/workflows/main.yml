@@ -100,7 +100,7 @@ jobs:
       with:
         hugo-version: '${{ env.HUGO_VERSION }}' # Uses the version defined in 'env'
         extended: true # <-- CRITICAL: This flag installs the Extended version
-      working-directory: blog # Ensure this runs in the context of your 'blog' directory
+        working-directory: blog # Ensure this runs in the context of your 'blog' directory
     
     # 6B. Build Hugo Site
     - name: Build Hugo Site
