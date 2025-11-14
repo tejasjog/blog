@@ -19,8 +19,6 @@ jobs:
       # 2. Run Submodule Update (Must run after the folder is created)
       - name: Update Submodules
         run: git submodule update --init --recursive
-        # ✅ working-directory: blog is now safe, as 'blog' was created in Step 1
-        working-directory: blog 
 
       # 3. Setup Node.js 
       - name: Setup Node.js
@@ -32,7 +30,7 @@ jobs:
       - name: Cache Node Modules
         uses: actions/cache@v4
         with:
-          path: blog/node_modules 
+          path: /node_modules 
           key: ${{ runner.os }}-node-${{ hashFiles('blog/package-lock.json') }}
           
       # 5. Install Node Dependencies (npm install)
