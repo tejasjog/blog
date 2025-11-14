@@ -36,8 +36,9 @@ jobs:
         git submodule update --init --recursive --force
   
         # 2b. CRITICAL: Remove the hidden .git directories from content submodules.
-        # The 'themes/PaperMod' submodule is excluded as it needs its .git directory.
-        find content/posts -name ".git" -type d -exec rm -rf {} +
+        # This command finds all .git directories nested within content/posts and removes them.
+        # This ensures content is processed by Hugo.
+        find content/posts -depth -name .git -exec rm -rf {} \;
         
         echo "Cleanup complete. Content submodules now look like regular folders."
   
