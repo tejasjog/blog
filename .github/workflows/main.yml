@@ -25,7 +25,7 @@ jobs:
         git config --global url."https://oauth2:$GIT_OAUTH_TOKEN@gitlab.com".insteadOf "https://gitlab.com"
         
         # 1b. Clone the repository first using the token
-        git clone --depth 0 https://gitlab.com/tejasjog/blog.git
+        git clone https://gitlab.com/tejasjog/blog.git
         
         # 1b. Change directory to the cloned repo
         cd blog
@@ -37,7 +37,7 @@ jobs:
       run: |
         echo "Attempting to update submodules..."
         # 2a. Update/initialize all submodules. This now uses the authenticated URL.
-        git submodule update --init --recursive --force
+        git submodule update --init --force --recursive --remote --verbose
 
         echo "## 📊 File Count Per Directory ##"
         echo "--------------------------------"
