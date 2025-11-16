@@ -91,7 +91,7 @@ jobs:
     - name: Build Hugo Site
       run: |
         # The 'hugo' command is now available on PATH from the previous step.
-        hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog-blog.pages.dev/' }} --destination public-cf --verbose --environment production
+        hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog-blog.pages.dev/' }} --destination public-cf --logLevel debug --environment production
       working-directory: blog
 
     # 7. Install Wrangler (Globally installed)
