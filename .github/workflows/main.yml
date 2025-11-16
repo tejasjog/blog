@@ -39,9 +39,27 @@ jobs:
         # 2a. Update/initialize all submodules. This now uses the authenticated URL.
         git submodule update --init --recursive --force
 
-        echo "Total files in repository:"
-        find . -type f | wc -l
-        echo "Files excluding .git directory:"
+        echo "## 📊 File Count Per Directory ##"
+        echo "--------------------------------"
+        
+        # Find all directories (excluding the main .git folder)
+        # The -path ./.git -prune part tells find to ignore the Git metadata directory.
+        find . -path ./.git -prune -o -type d -print | while read dir; do
+            
+            # Use find again to count only files (-type f) within that specific directory ($dir)
+            # The '2>/dev/null' suppresses any potential permission errors.
+            file_count=$(find "$dir" -maxdepth 1 -type f 2>/dev/null | wc -l)
+            
+            # Print the count and the directory name.
+            # The '{print $0}' ensures the directory name is used exactly as read.
+            if [ "$file_count" -gt 0 ]; then
+                echo "$file_count files in: $dir"
+            fi
+        done
+        echo "--------------------------------"
+        
+        # Optional: Keep your original total count for comparison
+        echo "Total files in repository (excluding .git):"
         find . -path ./.git -prune -o -type f -print | wc -l
 
     # NEW STEP: Install System Dependencies (Brotli and Dart Sass)
