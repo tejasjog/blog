@@ -19,16 +19,16 @@ jobs:
         # Use a variable name that Git can easily interpret as a token
         GIT_OAUTH_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }} 
       run: |
-        # 1a. Clone the repository first using the token
-        git clone --depth 0 https://oauth2:$GIT_OAUTH_TOKEN@gitlab.com/tejasjog/blog.git
-        
-        # 1b. Change directory to the cloned repo
-        cd blog
-        
-        # 1c. CRITICAL: Configure Git to replace all 'https://gitlab.com' 
+        # 1a. CRITICAL: Configure Git to replace all 'https://gitlab.com' 
         # URLs in the .gitmodules file with the authenticated token URL.
         # This ensures that git submodule update succeeds for private repos.
         git config --global url."https://oauth2:$GIT_OAUTH_TOKEN@gitlab.com".insteadOf "https://gitlab.com"
+        
+        # 1b. Clone the repository first using the token
+        git clone --depth 0 https://gitlab.com/tejasjog/blog.git
+        
+        # 1b. Change directory to the cloned repo
+        cd blog
         
     # 2. Run Submodule Update and Cleanup .git files
     - name: Update Submodules and Cleanup Content Directories
