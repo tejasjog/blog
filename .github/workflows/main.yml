@@ -109,6 +109,70 @@ jobs:
         hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog-blog.pages.dev/' }} --destination public-cf --logLevel debug --environment production
       working-directory: blog
 
+    # --- NEW STEP FOR CLEANUP ---
+    # 6C. Cloudflare Cleanup: Delete files specified in .droplist
+    - name: Cloudflare Cleanup: Delete .droplist Files
+      working-directory: blog
+      run: |
+        echo "Searching for .droplist files..."
+        # 1. Use 'find' to locate all files with the .droplist extension within the output directory.
+        DROPLIST_FILES=$(find public-cf -name "*.droplist")
+        if [ -z "$DROPLIST_FILES" ]; then
+          echo "No .droplist files found. Exiting cleanup."
+        fi
+        
+        # 2. Iterate through each .droplist file found.
+        for DROPLIST_FILE in $DROPLIST_FILES; do
+          echo "Processing $DROPLIST_FILE..."
+          # Get the directory of the .droplist file to resolve relative paths.
+          # Example: If file is public-cf/posts/_index.html.droplist, DIR is public-cf/posts
+          DROPLIST_DIR=$(dirname "$DROPLIST_FILE")
+
+          # 3. Read the content of the .droplist file line by line.
+          while IFS= read -r FILE_TO_DELETE; do
+            # Exit if line is empty
+            [ -z "$FILE_TO_DELETE" ] && continue
+
+            # Extract filename and extension
+            filename="${FILE_TO_DELETE%.*}"
+            extension="${FILE_TO_DELETE##*.}"
+            
+            # Create lowercase and uppercase extension variants (Hugo generates both)
+            LOWERCASE_EXTENSION=$(echo "$extension" | tr '[:upper:]' '[:lower:]')
+            UPPERCASE_EXTENSION="${extension^^}"
+            
+            # Rebuild the full filename with the modified extension(s)
+            if [ "$filename" != "$FILE_TO_DELETE" ]; then
+              # File with extension (e.g., 'image.JPG')
+              FULL_PATH_TO_DELETE_LOWERCASE_EXTENSION="$DROPLIST_DIR/${filename}.${LOWERCASE_EXTENSION}"
+              FULL_PATH_TO_DELETE_UPPERCASE_EXTENSION="$DROPLIST_DIR/${filename}.${UPPERCASE_EXTENSION}"
+            else
+              # Case for files without an extension (just the original filename)
+              FULL_PATH_TO_DELETE_LOWERCASE_EXTENSION="$DROPLIST_DIR/$FILE_TO_DELETE"
+              FULL_PATH_TO_DELETE_UPPERCASE_EXTENSION="" # No uppercase check needed for no-ext files
+            fi
+
+            # Check and delete the lowercase extension variant
+            if [ -f "$FULL_PATH_TO_DELETE_LOWERCASE_EXTENSION" ]; then
+              echo "Deleting file: $FULL_PATH_TO_DELETE_LOWERCASE_EXTENSION"
+              rm "$FULL_PATH_TO_DELETE_LOWERCASE_EXTENSION"
+            else
+              echo "Warning: File not found - $FULL_PATH_TO_DELETE_LOWERCASE_EXTENSION"
+            fi
+
+            # Check and delete the uppercase extension variant (only if an extension existed)
+            if [ -n "$FULL_PATH_TO_DELETE_UPPERCASE_EXTENSION" ] && [ -f "$FULL_PATH_TO_DELETE_UPPERCASE_EXTENSION" ]; then
+              echo "Deleting file: $FULL_PATH_TO_DELETE_UPPERCASE_EXTENSION"
+              rm "$FULL_PATH_TO_DELETE_UPPERCASE_EXTENSION"
+            fi
+            
+          done < "$DROPLIST_FILE"
+          
+          # Optional: Delete the .droplist file itself after processing
+          rm "$DROPLIST_FILE"
+        done    
+    # --- END NEW STEP ---
+
     # 7. Install Wrangler (Globally installed)
     - name: Install Wrangler
       run: npm install -g wrangler
