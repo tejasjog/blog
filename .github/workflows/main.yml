@@ -111,7 +111,7 @@ jobs:
 
     # --- NEW STEP FOR CLEANUP ---
     # 6C. Cloudflare Cleanup: Delete files specified in .droplist
-    - name: Cloudflare Cleanup: Delete .droplist Files
+    - name: Cloudflare Cleanup Delete .droplist Files
       working-directory: blog
       run: |
         echo "Searching for .droplist files..."
