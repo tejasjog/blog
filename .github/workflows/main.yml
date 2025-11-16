@@ -12,24 +12,18 @@ jobs:
       HUGO_VERSION: 0.148.0 # <-- Define your desired Hugo version here
       
     steps:
-    # 1. Checkout Code from GitLab (Using SSH or Token to handle submodules)
-    # We combine the clone and setup steps for better access control.
-    - name: Checkout Code with Submodule Authentication
-      env:
-        # Use a variable name that Git can easily interpret as a token
-        GIT_OAUTH_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }} 
-      run: |
-        # 1a. Clone the repository first using the token
-        git clone https://oauth2:$GIT_OAUTH_TOKEN@gitlab.com/tejasjog/blog.git
-        
-        # 1b. Change directory to the cloned repo
-        cd blog
-        
-        # 1c. CRITICAL: Configure Git to replace all 'https://gitlab.com' 
-        # URLs in the .gitmodules file with the authenticated token URL.
-        # This ensures that git submodule update succeeds for private repos.
-        git config --global url."https://oauth2:$GIT_OAUTH_TOKEN@gitlab.com".insteadOf "https://gitlab.com"
-        
+      # Step 1: Use the official checkout action
+    - name: ⬇️ Checkout Repository and Submodules
+      uses: actions/checkout@v4
+      with:
+        # ⚠️ CRITICAL: Must fetch full history for submodules to work reliably
+        fetch-depth: 0 
+        # ⚠️ CRITICAL: Must recursively checkout all submodules
+        submodules: true 
+        # If the submodule is private (on GitLab), you MUST use a Personal Access Token 
+        # that has read access to the submodule repository.
+        token: ${{ secrets.GITLAB_ACCESS_TOKEN }}
+   
     # 2. Run Submodule Update and Cleanup .git files
     - name: Update Submodules and Cleanup Content Directories
       # working-directory must be 'blog' now
