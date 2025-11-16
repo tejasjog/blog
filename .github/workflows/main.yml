@@ -39,11 +39,10 @@ jobs:
         # 2a. Update/initialize all submodules. This now uses the authenticated URL.
         git submodule update --init --recursive --force
 
-      run: |
-          echo "Total files in repository:"
-          find . -type f | wc -l
-          echo "Files excluding .git directory:"
-          find . -path ./.git -prune -o -type f -print | wc -l
+        echo "Total files in repository:"
+        find . -type f | wc -l
+        echo "Files excluding .git directory:"
+        find . -path ./.git -prune -o -type f -print | wc -l
 
     # NEW STEP: Install System Dependencies (Brotli and Dart Sass)
     - name: Install Brotli and Dart Sass
