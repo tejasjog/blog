@@ -173,11 +173,11 @@ jobs:
         done    
     # --- END NEW STEP ---
 
-    # 7. Install Wrangler (Globally installed)
+    # 7a. Install Wrangler (Globally installed)
     - name: Install Wrangler
       run: npm install -g wrangler
   
-    # 8. Deploy to Cloudflare Pages
+    # 7b. Deploy to Cloudflare Pages
     - name: Deploy to Cloudflare Pages
       uses: cloudflare/pages-action@v1 
       with:
@@ -186,3 +186,29 @@ jobs:
         projectName: 'tejasjog-blog'
         directory: 'blog/public-cf' 
         branch: 'master'
+
+    # 8a. Install Netlify CLI (Required for Netlify deployment)
+    - name: Install Netlify CLI
+      run: npm install netlify-cli -g
+
+    # 8b. Deploy to Netlify
+    - name: Deploy to Netlify
+      # Netlify requires a separate output directory or the use of --dir.
+      # Since we only built into 'public-cf', we must copy the content first.
+      working-directory: blog
+      run: |
+        echo "Copying Cloudflare build output (public-cf) to Netlify target (public-netlify)..."
+        # Create a new directory for Netlify's deployment
+        mkdir -p public-netlify
+        # Copy the contents of the Cloudflare build to the Netlify directory
+        cp -R public-cf/* public-netlify/
+        
+        echo "Starting Netlify deployment..."
+        # Deploy the copied directory
+        netlify deploy --prod --dir public-netlify --site ${{ env.NETLIFY_SITE_ID }}
+      env:
+        # Pass the token for authentication
+        NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ACCESS_TOKEN }}
+        
+    # --- END DUAL DEPLOYMENT STEPS ---  
+
