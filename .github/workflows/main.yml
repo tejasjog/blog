@@ -205,7 +205,7 @@ jobs:
         
         echo "Starting Netlify deployment..."
         # Deploy the copied directory
-        netlify deploy --prod --dir public-netlify --site ${{ env.NETLIFY_SITE_ID }}
+        netlify deploy --prod --dir public-netlify --site ${{ secrets.NETLIFY_SITE_ID }}
       env:
         # Pass the token for authentication
         NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ACCESS_TOKEN }}
