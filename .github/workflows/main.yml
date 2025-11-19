@@ -110,7 +110,7 @@ jobs:
       working-directory: blog
 
     # --- NEW STEP FOR CLEANUP ---
-    # 6C. Cloudflare Cleanup: Delete files specified in .droplist
+    # 6C. Cleanup: Delete files specified in .droplist
     - name: Cloudflare Cleanup Delete .droplist Files
       working-directory: blog
       run: |
@@ -205,11 +205,33 @@ jobs:
         
         echo "------------------------------------------------"
 
-    # 7a. Install Wrangler (Globally installed)
+    # --- START GITHUB PAGES DEPLOYMENT STEPS ---
+
+    # 7a. Setup GitHub Pages Deployment Environment
+    - name: Setup Pages
+      # This action sets up the environment variables needed for subsequent Pages actions.
+      uses: actions/configure-pages@v5
+
+    # 7b. Upload Artifact for GitHub Pages
+    - name: Upload GitHub Pages artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        # The directory containing the static files (your Hugo build output)
+        path: 'blog/public-cf'
+
+    # 7c. Deploy to GitHub Pages
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
+      # By default, this action uses the artifact uploaded in the previous step.
+    
+    # --- END GITHUB PAGES DEPLOYMENT STEPS ---
+    
+    # 8a. Install Wrangler (Globally installed)
     - name: Install Wrangler
       run: npm install -g wrangler
   
-    # 7b. Deploy to Cloudflare Pages
+    # 8b. Deploy to Cloudflare Pages
     - name: Deploy to Cloudflare Pages
       uses: cloudflare/pages-action@v1 
       with:
@@ -219,11 +241,11 @@ jobs:
         directory: 'blog/public-cf' 
         branch: 'master'
     
-    # 8a. Install Netlify CLI (Required for Netlify deployment)
+    # 9a. Install Netlify CLI (Required for Netlify deployment)
     - name: Install Netlify CLI
       run: npm install netlify-cli -g
 
-    # 8b. Deploy to Netlify
+    # 9b. Deploy to Netlify
     - name: Copying Cloudflare build output (public-cf) to Netlify target (public-netlify)
       # Netlify requires a separate output directory or the use of --dir.
       # Since we only built into 'public-cf', we must copy the content first.
@@ -235,7 +257,7 @@ jobs:
         # Copy the contents of the Cloudflare build to the Netlify directory
         cp -R public-cf/* public-netlify/
 
-    # 8c. NEW STEP: Replace Cloudflare Base URL with Netlify Base URL
+    # 9c. NEW STEP: Replace Cloudflare Base URL with Netlify Base URL
     - name: Netlify Base URL Fix
       working-directory: blog
       run: |
@@ -254,7 +276,7 @@ jobs:
         
         echo "Base URL replacement complete for Netlify deployment."
 
-    # 8d. Deploy to Netlify
+    # 9d. Deploy to Netlify
     - name: Deploy to Netlify
       # Netlify requires a separate output directory 'public-netlify'.
       working-directory: blog
