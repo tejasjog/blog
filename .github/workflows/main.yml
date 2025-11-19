@@ -120,7 +120,7 @@ jobs:
       run: |
         echo "Searching for .droplist files..."
         # 1. Use 'find' to locate all files with the .droplist extension within the output directory.
-        DROPLIST_FILES=$(find public-cf -name "*.droplist")
+        DROPLIST_FILES=$(find public -name "*.droplist")
         if [ -z "$DROPLIST_FILES" ]; then
           echo "No .droplist files found. Exiting cleanup."
         fi
@@ -129,7 +129,7 @@ jobs:
         for DROPLIST_FILE in $DROPLIST_FILES; do
           echo "Processing $DROPLIST_FILE..."
           # Get the directory of the .droplist file to resolve relative paths.
-          # Example: If file is public-cf/posts/_index.html.droplist, DIR is public-cf/posts
+          # Example: If file is public/posts/_index.html.droplist, DIR is public/posts
           DROPLIST_DIR=$(dirname "$DROPLIST_FILE")
 
           # 3. Read the content of the .droplist file line by line.
@@ -186,13 +186,13 @@ jobs:
         # -s: Summarize (show total size for each argument)
         # -h: Human-readable format (e.g., 100K, 2.5M, 1G)
         # The path is relative to the working-directory (blog)
-        du -sh public-cf
+        du -sh public
         
     # 6E. Report File Counts and Types
     - name: Report File Counts and Types
       working-directory: blog
       run: |
-        DEPLOY_DIR="public-cf"
+        DEPLOY_DIR="public"
         echo "## 📄 File Analysis in $DEPLOY_DIR ##"
         
         # 1. Total Number of Files
@@ -233,7 +233,7 @@ jobs:
         echo "  From: $BASE_URL"
         echo "  To: $CLOUDFLARE_URL"
         
-        # The 'find' command locates all files in public-cf.
+        # The 'find' command locates all files in public-gh.
         # The 'xargs' command passes those files to 'sed'.
         # 'sed' performs the search and replace operation in place (-i).
         # The delimiter is changed from '/' to '#' to handle URLs easily.
