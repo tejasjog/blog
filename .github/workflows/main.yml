@@ -210,22 +210,21 @@ jobs:
         CF_URL="${{ vars.CI_CF_PAGES_URL || 'https://tejasjog-blog.pages.dev/' }}"
         NETLIFY_URL="https://tejasjog-blog.netlify.app/" # <-- Define your Netlify URL here
         
-        echo "Replacing Base URL in 'public-cf' files:"
+        echo "Replacing Base URL in 'public-netlify' files:"
         echo "  From: $CF_URL"
         echo "  To: $NETLIFY_URL"
         
-        # The 'find' command locates all files in public-cf.
+        # The 'find' command locates all files in public-netlify.
         # The 'xargs' command passes those files to 'sed'.
         # 'sed' performs the search and replace operation in place (-i).
         # The delimiter is changed from '/' to '#' to handle URLs easily.
-        find public-cf -type f -exec sed -i "s#$CF_URL#$NETLIFY_URL#g" {} +
+        find public-netlify -type f -exec sed -i "s#$CF_URL#$NETLIFY_URL#g" {} +
         
         echo "Base URL replacement complete for Netlify deployment."
 
     # 8d. Deploy to Netlify
     - name: Deploy to Netlify
-      # Netlify requires a separate output directory or the use of --dir.
-      # Since we only built into 'public-cf', we must copy the content first.
+      # Netlify requires a separate output directory 'public-netlify'.
       working-directory: blog
       run: |
         echo "Starting Netlify deployment..."
