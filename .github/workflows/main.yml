@@ -110,7 +110,7 @@ jobs:
     - name: Build Hugo Site
       run: |
         # The 'hugo' command is now available on PATH from the previous step.
-        hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejas.jog/blog' }} --destination public --logLevel debug --environment production
+        hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejas.jog/blog/' }} --destination public --logLevel debug --environment production
       working-directory: blog
 
     # --- NEW STEP FOR CLEANUP ---
@@ -226,8 +226,8 @@ jobs:
     - name: GitHub Pages Base URL Fix
       working-directory: blog
       run: |
-        BASE_URL="https://tejas.jog/blog"
-        GITHUB_URL="https://tejasjog.github.io/blog" # <-- Define your GitHub Pages URL here
+        BASE_URL="https://tejas.jog/blog/"
+        GITHUB_URL="https://tejasjog.github.io/blog/" # <-- Define your GitHub Pages URL here
         
         echo "Replacing Base URL in 'public-gh' files:"
         echo "  From: $BASE_URL"
@@ -280,7 +280,7 @@ jobs:
     - name: Cloudflare Pages Base URL Fix
       working-directory: blog
       run: |
-        BASE_URL="https://tejas.jog/blog"
+        BASE_URL="https://tejas.jog/blog/"
         CLOUDFLARE_URL="https://tejasjog-blog.pages.dev/" # <-- Define your Cloudflare Pages URL here
         
         echo "Replacing Base URL in 'public-cf' files:"
@@ -324,7 +324,7 @@ jobs:
     - name: Netlify Base URL Fix
       working-directory: blog
       run: |
-        BASE_URL="https://tejas.jog/blog"
+        BASE_URL="https://tejas.jog/blog/"
         NETLIFY_URL="https://tejasjog-blog.netlify.app/" # <-- Define your Netlify URL here
         
         echo "Replacing Base URL in 'public-netlify' files:"
