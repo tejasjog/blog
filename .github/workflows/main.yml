@@ -6,7 +6,11 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
+      pages: write
+      id-token: write # Required for deploy-pages action
+      
     env:
       DART_SASS_VERSION: 1.77.4 # Define the Dart Sass version globally for the job
       HUGO_VERSION: 0.148.0 # <-- Define your desired Hugo version here
