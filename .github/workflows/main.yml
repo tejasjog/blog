@@ -173,6 +173,38 @@ jobs:
         done    
     # --- END NEW STEP ---
 
+    # 6D. Report Final Deployed Folder Size
+    - name: Report Final Deployed Folder Size
+      working-directory: blog
+      run: |
+        echo "## 💾 Final Deployed Folder Size ##"
+        # The 'du' command calculates the size:
+        # -s: Summarize (show total size for each argument)
+        # -h: Human-readable format (e.g., 100K, 2.5M, 1G)
+        # The path is relative to the working-directory (blog)
+        du -sh public-cf
+        
+    # 6E. Report File Counts and Types
+    - name: Report File Counts and Types
+      working-directory: blog
+      run: |
+        DEPLOY_DIR="public-cf"
+        echo "## 📄 File Analysis in $DEPLOY_DIR ##"
+        
+        # 1. Total Number of Files
+        TOTAL_FILES=$(find "$DEPLOY_DIR" -type f | wc -l)
+        echo "Total files in deployed directory: $TOTAL_FILES"
+        echo "------------------------------------------------"
+        
+        # 2. Breakdown by File Extension (Type)
+        echo "File Type Breakdown:"
+        # Use find to list all files (-type f), 
+        # then use sed to extract the extension (everything after the last dot),
+        # sort the results, count unique occurrences, and print the count and extension.
+        find "$DEPLOY_DIR" -type f | sed 's/.*\.//' | sort | uniq -c | sort -nr
+        
+        echo "------------------------------------------------"
+
     # 7a. Install Wrangler (Globally installed)
     - name: Install Wrangler
       run: npm install -g wrangler
