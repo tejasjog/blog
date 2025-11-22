@@ -115,7 +115,7 @@ jobs:
         SHORTCODE_PATHS=$(find . -path "*/shortcodes/responsiveImage.html" -type f)
         OLD_TEXT='{{ $widths := slice 1600 }}'
         # NOTE: Assuming $CLOUDFLARE_IMAGE_WIDTHS is passed as a var/secret, otherwise hardcode
-        NEW_TEXT='${{ vars.CLOUDFLARE_IMAGE_WIDTHS || "slice 800 1024 1600 2048" }}' 
+        NEW_TEXT=${{ vars.CLOUDFLARE_IMAGE_WIDTHS || 'slice 800 1024 1600 2048' }}
 
         echo "using: $NEW_TEXT"
         
