@@ -66,7 +66,7 @@ jobs:
         echo "Total files in repository (excluding .git):"
         find . -path ./.git -prune -o -type f -print | wc -l
 
-    # NEW STEP: Install System Dependencies (Brotli and Dart Sass)
+    # 3 NEW STEP: Install System Dependencies (Brotli and Dart Sass)
     - name: Install Brotli and Dart Sass
       # This step must run in the root of the runner before Node.js setup
       run: |
@@ -101,10 +101,39 @@ jobs:
         sudo curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION} | bash -
         sudo apt-get install -y nodejs
 
-    # 5. Install Node Dependencies (npm install)
+    # 4. Install Node Dependencies (npm install)
     - name: Install Node Dependencies
       run: npm install
       working-directory: blog 
+
+    # 5. NEW: SHORTCODE MODIFICATION
+    - name: Modify responsiveImage Shortcode for Widths from context
+      working-directory: blog
+      run: |
+        # Find the path to 'responsiveImage.html' within any 'shortcodes' subdirectory
+        # This looks for any file path containing '/shortcodes/responsiveImage.html'
+        SHORTCODE_PATHS=$(find . -path "*/shortcodes/responsiveImage.html" -type f)
+        OLD_TEXT='{{ $widths := slice 1600 }}'
+        # NOTE: Assuming $CLOUDFLARE_IMAGE_WIDTHS is passed as a var/secret, otherwise hardcode
+        NEW_TEXT='${{ vars.CLOUDFLARE_IMAGE_WIDTHS || "slice 800 1024 1600 2048" }}' 
+
+        echo "using: $NEW_TEXT"
+        
+        if [ -z "$SHORTCODE_PATHS" ]; then
+          echo "WARNING: No 'responsiveImage.html' found in any 'shortcodes' directory. Skipping modification."
+        else
+          echo "Found the following shortcode file(s):"
+          echo "$SHORTCODE_PATHS"
+          
+          for SHORTCODE_PATH in $SHORTCODE_PATHS; do
+            echo "Modifying file: $SHORTCODE_PATH"
+            # Use sed to replace the old slice with the new slice. 
+            # Since the old text contains slashes (/), we use a different sed delimiter (|)
+            # The 'g' flag ensures global replacement if the text appears multiple times.
+            sed -i "s|${OLD_TEXT}|{{ \$widths := ${NEW_TEXT} }}|g" "$SHORTCODE_PATH"
+          done
+          echo "Modification complete for all found file(s)."
+        fi
         
     # 6B. Build Hugo Site
     - name: Build Hugo Site
