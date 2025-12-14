@@ -31,7 +31,7 @@ jobs:
         # 1b. Clone the repository first using the token
         git clone https://gitlab.com/tejasjog/blog.git
         
-        # 1b. Change directory to the cloned repo
+        # 1c. Change directory to the cloned repo
         cd blog
         
     # 2. Run Submodule Update and Cleanup .git files
@@ -66,8 +66,8 @@ jobs:
         echo "Total files in repository (excluding .git):"
         find . -path ./.git -prune -o -type f -print | wc -l
 
-    # 3 NEW STEP: Install System Dependencies (Brotli and Dart Sass)
-    - name: Install Brotli and Dart Sass
+    # 3. Install System Dependencies (Brotli, Dart Sass, Hugo)
+    - name: Install Brotli, Dart Sass, Hugo, and Node.js
       # This step must run in the root of the runner before Node.js setup
       run: |
         echo "Installing system dependencies: brotli and Dart Sass..."
@@ -85,19 +85,24 @@ jobs:
         # Move the executables to a standard PATH location
         sudo cp -r dart-sass/* /usr/local/bin/
         
-        # Clean up downloaded files
+        # Clean up downloaded files (CRITICAL FOR SPACE)
         rm -rf dart-sass*
         
-        # The /usr/local/bin is already in the system PATH, so an explicit export is not necessary 
-        # for subsequent steps in the same job, but we'll confirm the files are there.
         echo "Dart Sass installed to /usr/local/bin"
         
         # Install Hugo
-        sudo curl -LJO https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb
-        sudo apt-get install -y ./hugo_extended_${HUGO_VERSION}_linux-amd64.deb
-        sudo rm hugo_extended_${HUGO_VERSION}_linux-amd64.deb
+        HUGO_DEB_FILENAME="hugo_extended_${HUGO_VERSION}_linux-amd64.deb"
+        sudo curl -LJO https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/$HUGO_DEB_FILENAME
+        sudo apt-get install -y ./$HUGO_DEB_FILENAME
+        # Clean up downloaded files (CRITICAL FOR SPACE)
+        sudo rm $HUGO_DEB_FILENAME
 
         # Install Node.js
+        # NOTE: You are using the variable ${NODE_VERSION} which is not defined. 
+        # I'm using a common version setup here, but you should define NODE_VERSION 
+        # as a job-level environment variable like you did for HUGO_VERSION.
+        # Assuming Node 20 for this fix.
+        NODE_VERSION="20"
         sudo curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION} | bash -
         sudo apt-get install -y nodejs
 
@@ -207,10 +212,10 @@ jobs:
     # --- END NEW STEP ---
 
     # 6D. Report Final Deployed Folder Size
-    - name: Report Final Deployed Folder Size
+    - name: Report Build Folder Size
       working-directory: blog
       run: |
-        echo "## 💾 Final Deployed Folder Size ##"
+        echo "## 💾 Hugo Build Folder Size (public) ##"
         # The 'du' command calculates the size:
         # -s: Summarize (show total size for each argument)
         # -h: Human-readable format (e.g., 100K, 2.5M, 1G)
@@ -218,7 +223,7 @@ jobs:
         du -sh public
         
     # 6E. Report File Counts and Types
-    - name: Report File Counts and Types
+    - name: Report Build File Counts and Types
       working-directory: blog
       run: |
         DEPLOY_DIR="public"
@@ -226,7 +231,7 @@ jobs:
         
         # 1. Total Number of Files
         TOTAL_FILES=$(find "$DEPLOY_DIR" -type f | wc -l)
-        echo "Total files in deployed directory: $TOTAL_FILES"
+        echo "Total files in built directory: $TOTAL_FILES"
         echo "------------------------------------------------"
         
         # 2. Breakdown by File Extension (Type)
@@ -281,12 +286,30 @@ jobs:
         projectName: 'tejasjog-blog'
         directory: 'blog/public-cf' 
         branch: 'master'
+
+    # --- SPACE CLEANUP: Delete the Cloudflare target directory and the original build directory ---
+    - name: Cleanup Cloudflare Target and Main Build
+      working-directory: blog
+      run: |
+        echo "Cleaning up public-cf and public directories to free up space..."
+        rm -rf public-cf
+        rm -rf public
+        echo "Cleanup complete."
+    # --- END SPACE CLEANUP ---
     
     # 9a. Install Netlify CLI (Required for Netlify deployment)
     - name: Install Netlify CLI
       run: npm install netlify-cli -g
 
-    # 9b. Create folder for Netlify
+    # 9b. Re-Build Hugo Site for Netlify
+    # Since we deleted 'public', we need to rebuild it to create 'public-netlify'
+    - name: Re-Build Hugo Site for Netlify
+      run: |
+        # The 'hugo' command is available on PATH.
+        hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejas.jog/' }} --destination public --logLevel debug --environment production
+      working-directory: blog
+
+    # 9c. Create folder for Netlify
     - name: Copying build output (public) to Netlify target (public-netlify)
       # Since we only built into 'public', we must copy the content first.
       working-directory: blog
@@ -294,10 +317,10 @@ jobs:
         echo "Copying build output (public) to Netlify target (public-netlify)..."
         # Create a new directory for Netlify's deployment
         mkdir -p public-netlify
-        # Copy the contents of the Cloudflare build to the Netlify directory
+        # Copy the contents of the Hugo build to the Netlify directory
         cp -R public/* public-netlify/
 
-    # 9c. NEW STEP: Replace Cloudflare Base URL with Netlify Base URL
+    # 9d. NEW STEP: Replace Cloudflare Base URL with Netlify Base URL
     - name: Netlify Base URL Fix
       working-directory: blog
       run: |
@@ -316,7 +339,7 @@ jobs:
         
         echo "Base URL replacement complete for Netlify deployment."
 
-    # 9d. Deploy to Netlify
+    # 9e. Deploy to Netlify
     - name: Deploy to Netlify
       # Netlify requires a separate output directory 'public-netlify'.
       working-directory: blog
@@ -327,6 +350,13 @@ jobs:
       env:
         # Pass the token for authentication
         NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ACCESS_TOKEN }}
-        
-    # --- END DUAL DEPLOYMENT STEPS ---  
 
+    # --- FINAL CLEANUP ---
+    - name: Final Cleanup
+      working-directory: blog
+      run: |
+        echo "Performing final cleanup of build directories..."
+        rm -rf public
+        rm -rf public-netlify
+        echo "Final cleanup complete."
+    # --- END FINAL CLEANUP ---
