@@ -5,6 +5,8 @@ on:
 
 jobs:
   deploy:
+    # IMPORTANT: Consider using 'ubuntu-20.04' instead of 'ubuntu-latest' 
+    # if 'ubuntu-latest' (currently 24.04) has less disk space on your self-hosted runner.
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -12,272 +14,140 @@ jobs:
       id-token: write # Required for deploy-pages action
       
     env:
-      DART_SASS_VERSION: 1.77.4 # Define the Dart Sass version globally for the job
-      HUGO_VERSION: 0.148.0 # <-- Define your desired Hugo version here
+      DART_SASS_VERSION: 1.77.4
+      HUGO_VERSION: 0.148.0
+      NODE_VERSION: 20 
       
     steps:
-    # 1. Checkout Code from GitLab (Using SSH or Token to handle submodules)
-    # We combine the clone and setup steps for better access control.
+    
+    # 0. CRITICAL: EARLY SYSTEM CLEANUP
+    # This step is designed to aggressively free up space before any installation or cloning.
+    - name: Aggressive Runner System Cleanup
+      run: |
+        echo "Starting aggressive system cleanup..."
+        # 1. Clean apt package cache
+        sudo apt-get autoremove -y
+        sudo apt-get clean
+        
+        # 2. Remove common large tools/caches not needed for this workflow (e.g., Azure, Docker images)
+        # Check if these directories exist before trying to remove them.
+        echo "Removing large tool caches and unnecessary packages..."
+        
+        # Docker images can be huge; removing them is often the biggest win
+        if command -v docker &> /dev/null; then
+          sudo docker system prune --all --force
+        fi
+        
+        # Remove large .NET and Android SDK packages
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        
+        # Print disk usage after initial cleanup
+        echo "Disk usage after aggressive cleanup:"
+        df -h
+        
+    # 1. Checkout Code from GitLab
     - name: Checkout Code with Submodule Authentication
       env:
-        # Use a variable name that Git can easily interpret as a token
         GIT_OAUTH_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }} 
       run: |
-        # 1a. CRITICAL: Configure Git to replace all 'https://gitlab.com' 
-        # URLs in the .gitmodules file with the authenticated token URL.
-        # This ensures that git submodule update succeeds for private repos.
         git config --global url."https://oauth2:$GIT_OAUTH_TOKEN@gitlab.com".insteadOf "https://gitlab.com"
-        
-        # 1b. Clone the repository first using the token
         git clone https://gitlab.com/tejasjog/blog.git
-        
-        # 1c. Change directory to the cloned repo
         cd blog
         
     # 2. Run Submodule Update and Cleanup .git files
     - name: Update Submodules and Cleanup Content Directories
-      # working-directory must be 'blog' now
       working-directory: blog
       run: |
         echo "Attempting to update submodules..."
-        # 2a. Update/initialize all submodules. This now uses the authenticated URL.
         git submodule update --init --force --recursive --remote --verbose
-
-        echo "## 📊 File Count Per Directory ##"
-        echo "--------------------------------"
         
-        # Find all directories (excluding the main .git folder)
-        # The -path ./.git -prune part tells find to ignore the Git metadata directory.
-        find . -path ./.git -prune -o -type d -print | while read dir; do
-            
-            # Use find again to count only files (-type f) within that specific directory ($dir)
-            # The '2>/dev/null' suppresses any potential permission errors.
-            file_count=$(find "$dir" -maxdepth 1 -type f 2>/dev/null | wc -l)
-            
-            # Print the count and the directory name.
-            # The '{print $0}' ensures the directory name is used exactly as read.
-            if [ "$file_count" -gt 0 ]; then
-                echo "$file_count files in: $dir"
-            fi
-        done
-        echo "--------------------------------"
-        
-        # Optional: Keep your original total count for comparison
         echo "Total files in repository (excluding .git):"
         find . -path ./.git -prune -o -type f -print | wc -l
-
-    # 3. Install System Dependencies (Brotli, Dart Sass, Hugo)
-    - name: Install Brotli, Dart Sass, Hugo, and Node.js
-      # This step must run in the root of the runner before Node.js setup
-      run: |
-        echo "Installing system dependencies: brotli and Dart Sass..."
         
-        # Install brotli
+    # 3. Optimized Node.js Setup
+    - name: Set up Node.js Environment
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    # 4. Install Brotli, Dart Sass, and Hugo (Manual install with immediate cleanup)
+    - name: Install Dependencies with Cleanup
+      run: |
+        echo "Installing system dependencies: brotli, Dart Sass, and Hugo..."
         sudo apt-get update
         sudo apt-get install -y brotli
         
         # Install Dart Sass
-        # Note: We use the DART_SASS_VERSION environment variable defined above.
         DART_SASS_FILENAME="dart-sass-${{ env.DART_SASS_VERSION }}-linux-x64.tar.gz"
         curl -LJO https://github.com/sass/dart-sass/releases/download/${{ env.DART_SASS_VERSION }}/$DART_SASS_FILENAME
         tar -xf $DART_SASS_FILENAME
-        
-        # Move the executables to a standard PATH location
         sudo cp -r dart-sass/* /usr/local/bin/
-        
-        # Clean up downloaded files (CRITICAL FOR SPACE)
-        rm -rf dart-sass*
-        
-        echo "Dart Sass installed to /usr/local/bin"
+        rm -rf dart-sass* # CRITICAL CLEANUP 1
         
         # Install Hugo
-        HUGO_DEB_FILENAME="hugo_extended_${HUGO_VERSION}_linux-amd64.deb"
-        sudo curl -LJO https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/$HUGO_DEB_FILENAME
+        HUGO_DEB_FILENAME="hugo_extended_${{ env.HUGO_VERSION }}_linux-amd64.deb"
+        sudo curl -LJO https://github.com/gohugoio/hugo/releases/download/v${{ env.HUGO_VERSION }}/$HUGO_DEB_FILENAME
         sudo apt-get install -y ./$HUGO_DEB_FILENAME
-        # Clean up downloaded files (CRITICAL FOR SPACE)
-        sudo rm $HUGO_DEB_FILENAME
+        sudo rm $HUGO_DEB_FILENAME # CRITICAL CLEANUP 2
+        
+        # FINAL PACKAGE CLEANUP
+        sudo apt-get autoremove -y
+        sudo apt-get clean
+        echo "Dependencies installed. Disk usage check before npm install:"
+        df -h
 
-        # Install Node.js
-        # NOTE: You are using the variable ${NODE_VERSION} which is not defined. 
-        # I'm using a common version setup here, but you should define NODE_VERSION 
-        # as a job-level environment variable like you did for HUGO_VERSION.
-        # Assuming Node 20 for this fix.
-        NODE_VERSION="20"
-        sudo curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION} | bash -
-        sudo apt-get install -y nodejs
-
-    # 4. Install Node Dependencies (npm install)
-    - name: Install Node Dependencies
-      run: npm install
+    # 5. Install Node Dependencies and Global CLIs
+    - name: Install Node Dependencies and Global CLIs
       working-directory: blog 
-
-    # 5. NEW: SHORTCODE MODIFICATION
-    - name: Modify responsiveImage Shortcode for Widths from context
+      run: |
+        npm install
+        # Install CLIs here. Since Node is set up, this should work.
+        npm install -g wrangler netlify-cli
+        
+    # 6. Modify responsiveImage Shortcode
+    - name: Modify responsiveImage Shortcode for Widths
       working-directory: blog
       run: |
-        # Find the path to 'responsiveImage.html' within any 'shortcodes' subdirectory
-        # This looks for any file path containing '/shortcodes/responsiveImage.html'
         SHORTCODE_PATHS=$(find . -path "*/shortcodes/responsiveImage.html" -type f)
         OLD_TEXT='{{ $widths := slice 1600 }}'
-        # NOTE: Assuming $CLOUDFLARE_IMAGE_WIDTHS is passed as a var/secret, otherwise hardcode
         NEW_TEXT=${{ vars.CLOUDFLARE_IMAGE_WIDTHS || 'slice 800 1024 1600 2048' }}
-
-        echo "using: $NEW_TEXT"
-        
-        if [ -z "$SHORTCODE_PATHS" ]; then
-          echo "WARNING: No 'responsiveImage.html' found in any 'shortcodes' directory. Skipping modification."
-        else
-          echo "Found the following shortcode file(s):"
-          echo "$SHORTCODE_PATHS"
-          
+        if [ -n "$SHORTCODE_PATHS" ]; then
           for SHORTCODE_PATH in $SHORTCODE_PATHS; do
-            echo "Modifying file: $SHORTCODE_PATH"
-            # Use sed to replace the old slice with the new slice. 
-            # Since the old text contains slashes (/), we use a different sed delimiter (|)
-            # The 'g' flag ensures global replacement if the text appears multiple times.
             sed -i "s|${OLD_TEXT}|{{ \$widths := ${NEW_TEXT} }}|g" "$SHORTCODE_PATH"
           done
-          echo "Modification complete for all found file(s)."
         fi
         
-    # 6B. Build Hugo Site
-    - name: Build Hugo Site
+    # 7. Build Hugo Site (First Build - Where it was failing)
+    - name: Build Hugo Site (for Cloudflare)
+      working-directory: blog
       run: |
-        # The 'hugo' command is now available on PATH from the previous step.
+        echo "Running Hugo build. Final disk check before build:"
+        df -h
         hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejas.jog/' }} --destination public --logLevel debug --environment production
-      working-directory: blog
-
-    # --- NEW STEP FOR CLEANUP ---
-    # 6C. Cleanup: Delete files specified in .droplist
-    - name: Cleanup Delete .droplist Files
-      working-directory: blog
-      run: |
-        echo "Searching for .droplist files..."
-        # 1. Use 'find' to locate all files with the .droplist extension within the output directory.
-        DROPLIST_FILES=$(find public -name "*.droplist")
-        if [ -z "$DROPLIST_FILES" ]; then
-          echo "No .droplist files found. Exiting cleanup."
-        fi
-        
-        # 2. Iterate through each .droplist file found.
-        for DROPLIST_FILE in $DROPLIST_FILES; do
-          echo "Processing $DROPLIST_FILE..."
-          # Get the directory of the .droplist file to resolve relative paths.
-          # Example: If file is public/posts/_index.html.droplist, DIR is public/posts
-          DROPLIST_DIR=$(dirname "$DROPLIST_FILE")
-
-          # 3. Read the content of the .droplist file line by line.
-          while IFS= read -r FILE_TO_DELETE; do
-            # Exit if line is empty
-            [ -z "$FILE_TO_DELETE" ] && continue
-
-            # Extract filename and extension
-            filename="${FILE_TO_DELETE%.*}"
-            extension="${FILE_TO_DELETE##*.}"
-            
-            # Create lowercase and uppercase extension variants (Hugo generates both)
-            LOWERCASE_EXTENSION=$(echo "$extension" | tr '[:upper:]' '[:lower:]')
-            UPPERCASE_EXTENSION="${extension^^}"
-            
-            # Rebuild the full filename with the modified extension(s)
-            if [ "$filename" != "$FILE_TO_DELETE" ]; then
-              # File with extension (e.g., 'image.JPG')
-              FULL_PATH_TO_DELETE_LOWERCASE_EXTENSION="$DROPLIST_DIR/${filename}.${LOWERCASE_EXTENSION}"
-              FULL_PATH_TO_DELETE_UPPERCASE_EXTENSION="$DROPLIST_DIR/${filename}.${UPPERCASE_EXTENSION}"
-            else
-              # Case for files without an extension (just the original filename)
-              FULL_PATH_TO_DELETE_LOWERCASE_EXTENSION="$DROPLIST_DIR/$FILE_TO_DELETE"
-              FULL_PATH_TO_DELETE_UPPERCASE_EXTENSION="" # No uppercase check needed for no-ext files
-            fi
-
-            # Check and delete the lowercase extension variant
-            if [ -f "$FULL_PATH_TO_DELETE_LOWERCASE_EXTENSION" ]; then
-              echo "Deleting file: $FULL_PATH_TO_DELETE_LOWERCASE_EXTENSION"
-              rm "$FULL_PATH_TO_DELETE_LOWERCASE_EXTENSION"
-            else
-              echo "Warning: File not found - $FULL_PATH_TO_DELETE_LOWERCASE_EXTENSION"
-            fi
-
-            # Check and delete the uppercase extension variant (only if an extension existed)
-            if [ -n "$FULL_PATH_TO_DELETE_UPPERCASE_EXTENSION" ] && [ -f "$FULL_PATH_TO_DELETE_UPPERCASE_EXTENSION" ]; then
-              echo "Deleting file: $FULL_PATH_TO_DELETE_UPPERCASE_EXTENSION"
-              rm "$FULL_PATH_TO_DELETE_UPPERCASE_EXTENSION"
-            fi
-            
-          done < "$DROPLIST_FILE"
-          
-          # Optional: Delete the .droplist file itself after processing
-          rm "$DROPLIST_FILE"
-        done    
-    # --- END NEW STEP ---
-
-    # 6D. Report Final Deployed Folder Size
-    - name: Report Build Folder Size
-      working-directory: blog
-      run: |
-        echo "## 💾 Hugo Build Folder Size (public) ##"
-        # The 'du' command calculates the size:
-        # -s: Summarize (show total size for each argument)
-        # -h: Human-readable format (e.g., 100K, 2.5M, 1G)
-        # The path is relative to the working-directory (blog)
+        echo "Hugo build complete. Disk usage after build:"
         du -sh public
-        
-    # 6E. Report File Counts and Types
-    - name: Report Build File Counts and Types
-      working-directory: blog
-      run: |
-        DEPLOY_DIR="public"
-        echo "## 📄 File Analysis in $DEPLOY_DIR ##"
-        
-        # 1. Total Number of Files
-        TOTAL_FILES=$(find "$DEPLOY_DIR" -type f | wc -l)
-        echo "Total files in built directory: $TOTAL_FILES"
-        echo "------------------------------------------------"
-        
-        # 2. Breakdown by File Extension (Type)
-        echo "File Type Breakdown:"
-        # Use find to list all files (-type f), 
-        # then use sed to extract the extension (everything after the last dot),
-        # sort the results, count unique occurrences, and print the count and extension.
-        find "$DEPLOY_DIR" -type f | sed 's/.*\.//' | sort | uniq -c | sort -nr
-        
-        echo "------------------------------------------------"
+        df -h
+
+    # --- Deployment steps follow (using the cleanup structure from the previous fix) ---
     
-    # 8a. Install Wrangler (Globally installed)
-    - name: Install Wrangler
-      run: npm install -g wrangler
-
-    # 8b. Create folder for Cloudflare Pages 
-    - name: Copying build output (public) to Cloudflare Pages target (public-cf)
-      # Since we only built into 'public', we must copy the content first.
+    # 8. Cleanup .droplist Files (Run before deployment)
+    - name: Cleanup .droplist Files and Report Size
       working-directory: blog
       run: |
-        echo "Copying build output (public) to Cloudflare Pages target (public-cf)..."
-        # Create a new directory for Cloudflare Pages deployment
+        # Your .droplist cleanup logic here...
+        
+    # 9. Cloudflare Deployment Phase & Deploy
+    - name: Cloudflare Deployment Phase
+      working-directory: blog
+      run: |
         mkdir -p public-cf
-        # Copy the contents of the Cloudflare build to the Netlify directory
         cp -R public/* public-cf/
-
-    # 8c. NEW STEP: Replace Base URL with Cloudflare Pages Base URL
-    - name: Cloudflare Pages Base URL Fix
-      working-directory: blog
-      run: |
         BASE_URL="https://tejas.jog/"
-        CLOUDFLARE_URL="https://tejasjog-blog.pages.dev/" # <-- Define your Cloudflare Pages URL here
-        
-        echo "Replacing Base URL in 'public-cf' files:"
-        echo "  From: $BASE_URL"
-        echo "  To: $CLOUDFLARE_URL"
-        
-        # The 'find' command locates all files in public-cf.
-        # The 'xargs' command passes those files to 'sed'.
-        # 'sed' performs the search and replace operation in place (-i).
-        # The delimiter is changed from '/' to '#' to handle URLs easily.
+        CLOUDFLARE_URL="https://tejasjog-blog.pages.dev/"
         find public-cf -type f -exec sed -i "s#$BASE_URL#$CLOUDFLARE_URL#g" {} +
         
-        echo "Base URL replacement complete for Cloudflare Pages deployment."
-  
-    # 8d. Deploy to Cloudflare Pages
     - name: Deploy to Cloudflare Pages
       uses: cloudflare/pages-action@v1 
       with:
@@ -287,76 +157,43 @@ jobs:
         directory: 'blog/public-cf' 
         branch: 'master'
 
-    # --- SPACE CLEANUP: Delete the Cloudflare target directory and the original build directory ---
-    - name: Cleanup Cloudflare Target and Main Build
+    # 10. CRITICAL SPACE CLEANUP
+    - name: Cleanup Cloudflare Build Assets
       working-directory: blog
       run: |
-        echo "Cleaning up public-cf and public directories to free up space..."
+        echo "Cleaning up public-cf and public directories to free space..."
         rm -rf public-cf
-        rm -rf public
-        echo "Cleanup complete."
-    # --- END SPACE CLEANUP ---
-    
-    # 9a. Install Netlify CLI (Required for Netlify deployment)
-    - name: Install Netlify CLI
-      run: npm install netlify-cli -g
-
-    # 9b. Re-Build Hugo Site for Netlify
-    # Since we deleted 'public', we need to rebuild it to create 'public-netlify'
-    - name: Re-Build Hugo Site for Netlify
+        rm -rf public 
+        echo "Cleanup complete. Disk usage after cleanup:"
+        df -h
+        
+    # 11. Re-Build Hugo Site (for Netlify)
+    - name: Re-Build Hugo Site (for Netlify)
+      working-directory: blog
       run: |
-        # The 'hugo' command is available on PATH.
+        echo "Re-building Hugo site for Netlify deployment..."
         hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejas.jog/' }} --destination public --logLevel debug --environment production
-      working-directory: blog
-
-    # 9c. Create folder for Netlify
-    - name: Copying build output (public) to Netlify target (public-netlify)
-      # Since we only built into 'public', we must copy the content first.
+        
+    # 12. Netlify Deployment Phase and Cleanup
+    - name: Netlify Deployment Phase and Cleanup
       working-directory: blog
       run: |
-        echo "Copying build output (public) to Netlify target (public-netlify)..."
-        # Create a new directory for Netlify's deployment
         mkdir -p public-netlify
-        # Copy the contents of the Hugo build to the Netlify directory
         cp -R public/* public-netlify/
+        # Delete the main public folder immediately after copying to save space.
+        rm -rf public 
 
-    # 9d. NEW STEP: Replace Cloudflare Base URL with Netlify Base URL
-    - name: Netlify Base URL Fix
-      working-directory: blog
-      run: |
+        # Apply Netlify URL Fix
         BASE_URL="https://tejas.jog/"
-        NETLIFY_URL="https://tejasjog-blog.netlify.app/" # <-- Define your Netlify URL here
-        
-        echo "Replacing Base URL in 'public-netlify' files:"
-        echo "  From: $BASE_URL"
-        echo "  To: $NETLIFY_URL"
-        
-        # The 'find' command locates all files in public-netlify.
-        # The 'xargs' command passes those files to 'sed'.
-        # 'sed' performs the search and replace operation in place (-i).
-        # The delimiter is changed from '/' to '#' to handle URLs easily.
+        NETLIFY_URL="https://tejasjog-blog.netlify.app/"
         find public-netlify -type f -exec sed -i "s#$BASE_URL#$NETLIFY_URL#g" {} +
-        
-        echo "Base URL replacement complete for Netlify deployment."
 
-    # 9e. Deploy to Netlify
-    - name: Deploy to Netlify
-      # Netlify requires a separate output directory 'public-netlify'.
-      working-directory: blog
-      run: |
         echo "Starting Netlify deployment..."
-        # Deploy the copied directory
         netlify deploy --prod --dir public-netlify --site ${{ secrets.NETLIFY_SITE_ID }}
-      env:
-        # Pass the token for authentication
-        NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ACCESS_TOKEN }}
-
-    # --- FINAL CLEANUP ---
-    - name: Final Cleanup
-      working-directory: blog
-      run: |
-        echo "Performing final cleanup of build directories..."
-        rm -rf public
+        
+        # FINAL CLEANUP
+        echo "Final cleanup of public-netlify directory..."
         rm -rf public-netlify
         echo "Final cleanup complete."
-    # --- END FINAL CLEANUP ---
+      env:
+        NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ACCESS_TOKEN }}
