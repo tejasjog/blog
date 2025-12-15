@@ -111,7 +111,7 @@ jobs:
       working-directory: blog
       run: |
         SHORTCODE_PATH=$(find . -path "*/shortcodes/responsiveImage.html" -type f | head -n 1)
-        OLD_TEXT='{{ $widths := slice 1600 }}'
+        OLD_TEXT='slice 1600'
         NEW_TEXT='${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}'
 
         if [ -n "$SHORTCODE_PATH" ]; then
