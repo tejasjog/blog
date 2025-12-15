@@ -166,15 +166,28 @@ jobs:
         rm -rf public 
         echo "Cleanup complete. Disk usage after cleanup:"
         df -h
+
+    # 11. Modify responsiveImage Shortcode
+    - name: Modify responsiveImage Shortcode for Widths
+      working-directory: blog
+      run: |
+        SHORTCODE_PATHS=$(find . -path "*/shortcodes/responsiveImage.html" -type f)
+        OLD_TEXT=${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}
+        NEW_TEXT=${{ vars.NETLIFY_IMAGE_WIDTHS || 'slice 800 1024 1600 2048' }}
+        if [ -n "$SHORTCODE_PATHS" ]; then
+          for SHORTCODE_PATH in $SHORTCODE_PATHS; do
+            sed -i "s|${OLD_TEXT}|{{ \$widths := ${NEW_TEXT} }}|g" "$SHORTCODE_PATH"
+          done
+        fi
         
-    # 11. Re-Build Hugo Site (for Netlify)
+    # 12. Re-Build Hugo Site (for Netlify)
     - name: Re-Build Hugo Site (for Netlify)
       working-directory: blog
       run: |
         echo "Re-building Hugo site for Netlify deployment..."
         hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejas.jog/' }} --destination public --logLevel debug --environment production
         
-    # 12. Netlify Deployment Phase and Cleanup
+    # 13. Netlify Deployment Phase and Cleanup
     - name: Netlify Deployment Phase and Cleanup
       working-directory: blog
       run: |
