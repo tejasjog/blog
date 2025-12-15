@@ -114,6 +114,8 @@ jobs:
         OLD_TEXT='slice 1600'
         NEW_TEXT='${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}'
 
+        echo "vars.CLOUDFLARE_IMAGE_WIDTHS: " ${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}
+        
         if [ -n "$SHORTCODE_PATH" ]; then
           echo "Found shortcode at: $SHORTCODE_PATH"
 
@@ -185,6 +187,8 @@ jobs:
         OLD_TEXT='${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}'
         NEW_TEXT='${{ vars.NETLIFY_IMAGE_WIDTHS }}'
 
+        echo "vars.NETLIFY_IMAGE_WIDTHS: " ${{ vars.NETLIFY_IMAGE_WIDTHS }}
+        
         if [ -n "$SHORTCODE_PATH" ]; then
           echo "Found shortcode at: $SHORTCODE_PATH"
 
