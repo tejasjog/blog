@@ -112,7 +112,7 @@ jobs:
       run: |
         SHORTCODE_PATHS=$(find . -path "*/shortcodes/responsiveImage.html" -type f)
         OLD_TEXT='{{ $widths := slice 1600 }}'
-        NEW_TEXT=${{ vars.CLOUDFLARE_IMAGE_WIDTHS || 'slice 800 1024 1600 2048' }}
+        NEW_TEXT=${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}
         if [ -n "$SHORTCODE_PATHS" ]; then
           for SHORTCODE_PATH in $SHORTCODE_PATHS; do
             sed -i "s|${OLD_TEXT}|{{ \$widths := ${NEW_TEXT} }}|g" "$SHORTCODE_PATH"
@@ -173,7 +173,7 @@ jobs:
       run: |
         SHORTCODE_PATHS=$(find . -path "*/shortcodes/responsiveImage.html" -type f)
         OLD_TEXT=${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}
-        NEW_TEXT=${{ vars.NETLIFY_IMAGE_WIDTHS || 'slice 800 1024 1600 2048' }}
+        NEW_TEXT=${{ vars.NETLIFY_IMAGE_WIDTHS }}
         if [ -n "$SHORTCODE_PATHS" ]; then
           for SHORTCODE_PATH in $SHORTCODE_PATHS; do
             sed -i "s|${OLD_TEXT}|{{ \$widths := ${NEW_TEXT} }}|g" "$SHORTCODE_PATH"
