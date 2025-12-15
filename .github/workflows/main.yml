@@ -168,7 +168,7 @@ jobs:
         df -h
 
     # 11. Modify responsiveImage Shortcode
-    - name: Modify responsiveImage Shortcode for Widths
+    - name: Modify responsiveImage Shortcode for Widths (for Netlify)
       working-directory: blog
       run: |
         SHORTCODE_PATHS=$(find . -path "*/shortcodes/responsiveImage.html" -type f)
