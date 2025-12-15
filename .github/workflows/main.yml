@@ -5,21 +5,21 @@ on:
 
 jobs:
   deploy:
-    # IMPORTANT: Consider using 'ubuntu-20.04' instead of 'ubuntu-latest' 
+    # IMPORTANT: Consider using 'ubuntu-20.04' instead of 'ubuntu-latest'
     # if 'ubuntu-latest' (currently 24.04) has less disk space on your self-hosted runner.
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pages: write
       id-token: write # Required for deploy-pages action
-      
+
     env:
       DART_SASS_VERSION: 1.77.4
       HUGO_VERSION: 0.148.0
-      NODE_VERSION: 20 
-      
+      NODE_VERSION: 20
+
     steps:
-    
+
     # 0. CRITICAL: EARLY SYSTEM CLEANUP
     # This step is designed to aggressively free up space before any installation or cloning.
     - name: Aggressive Runner System Cleanup
@@ -28,44 +28,44 @@ jobs:
         # 1. Clean apt package cache
         sudo apt-get autoremove -y
         sudo apt-get clean
-        
+
         # 2. Remove common large tools/caches not needed for this workflow (e.g., Azure, Docker images)
         # Check if these directories exist before trying to remove them.
         echo "Removing large tool caches and unnecessary packages..."
-        
+
         # Docker images can be huge; removing them is often the biggest win
         if command -v docker &> /dev/null; then
           sudo docker system prune --all --force
         fi
-        
+
         # Remove large .NET and Android SDK packages
         sudo rm -rf /usr/share/dotnet
         sudo rm -rf /usr/local/lib/android
         sudo rm -rf /opt/ghc
-        
+
         # Print disk usage after initial cleanup
         echo "Disk usage after aggressive cleanup:"
         df -h
-        
+
     # 1. Checkout Code from GitLab
     - name: Checkout Code with Submodule Authentication
       env:
-        GIT_OAUTH_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }} 
+        GIT_OAUTH_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
       run: |
         git config --global url."https://oauth2:$GIT_OAUTH_TOKEN@gitlab.com".insteadOf "https://gitlab.com"
         git clone https://gitlab.com/tejasjog/blog.git
         cd blog
-        
+
     # 2. Run Submodule Update and Cleanup .git files
     - name: Update Submodules and Cleanup Content Directories
       working-directory: blog
       run: |
         echo "Attempting to update submodules..."
         git submodule update --init --force --recursive --remote --verbose
-        
+
         echo "Total files in repository (excluding .git):"
         find . -path ./.git -prune -o -type f -print | wc -l
-        
+
     # 3. Optimized Node.js Setup
     - name: Set up Node.js Environment
       uses: actions/setup-node@v4
@@ -78,20 +78,20 @@ jobs:
         echo "Installing system dependencies: brotli, Dart Sass, and Hugo..."
         sudo apt-get update
         sudo apt-get install -y brotli
-        
+
         # Install Dart Sass
         DART_SASS_FILENAME="dart-sass-${{ env.DART_SASS_VERSION }}-linux-x64.tar.gz"
         curl -LJO https://github.com/sass/dart-sass/releases/download/${{ env.DART_SASS_VERSION }}/$DART_SASS_FILENAME
         tar -xf $DART_SASS_FILENAME
         sudo cp -r dart-sass/* /usr/local/bin/
         rm -rf dart-sass* # CRITICAL CLEANUP 1
-        
+
         # Install Hugo
         HUGO_DEB_FILENAME="hugo_extended_${{ env.HUGO_VERSION }}_linux-amd64.deb"
         sudo curl -LJO https://github.com/gohugoio/hugo/releases/download/v${{ env.HUGO_VERSION }}/$HUGO_DEB_FILENAME
         sudo apt-get install -y ./$HUGO_DEB_FILENAME
         sudo rm $HUGO_DEB_FILENAME # CRITICAL CLEANUP 2
-        
+
         # FINAL PACKAGE CLEANUP
         sudo apt-get autoremove -y
         sudo apt-get clean
@@ -100,25 +100,35 @@ jobs:
 
     # 5. Install Node Dependencies and Global CLIs
     - name: Install Node Dependencies and Global CLIs
-      working-directory: blog 
+      working-directory: blog
       run: |
         npm install
         # Install CLIs here. Since Node is set up, this should work.
         npm install -g wrangler netlify-cli
-        
-    # 6. Modify responsiveImage Shortcode
-    - name: Modify responsiveImage Shortcode for Widths
+
+    # 6. Modify responsiveImage Shortcode for Cloudflare Widths
+    - name: Modify responsiveImage Shortcode for Cloudflare Widths
       working-directory: blog
       run: |
-        SHORTCODE_PATHS=$(find . -path "*/shortcodes/responsiveImage.html" -type f)
+        SHORTCODE_PATH=$(find . -path "*/shortcodes/responsiveImage.html" -type f | head -n 1)
         OLD_TEXT='{{ $widths := slice 1600 }}'
-        NEW_TEXT=${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}
-        if [ -n "$SHORTCODE_PATHS" ]; then
-          for SHORTCODE_PATH in $SHORTCODE_PATHS; do
-            sed -i "s|${OLD_TEXT}|{{ \$widths := ${NEW_TEXT} }}|g" "$SHORTCODE_PATH"
-          done
+        NEW_TEXT='${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}'
+
+        if [ -n "$SHORTCODE_PATH" ]; then
+          echo "Found shortcode at: $SHORTCODE_PATH"
+
+          echo "--- Content BEFORE replacement (Cloudflare) ---"
+          cat "$SHORTCODE_PATH"
+
+          # Perform replacement
+          sed -i "s|${OLD_TEXT}|{{ \$widths := ${NEW_TEXT} }}|g" "$SHORTCODE_PATH"
+
+          echo "--- Content AFTER replacement (Cloudflare) ---"
+          cat "$SHORTCODE_PATH"
+        else
+          echo "Warning: responsiveImage.html not found."
         fi
-        
+
     # 7. Build Hugo Site (First Build - Where it was failing)
     - name: Build Hugo Site (for Cloudflare)
       working-directory: blog
@@ -131,13 +141,13 @@ jobs:
         df -h
 
     # --- Deployment steps follow (using the cleanup structure from the previous fix) ---
-    
+
     # 8. Cleanup .droplist Files (Run before deployment)
     - name: Cleanup .droplist Files and Report Size
       working-directory: blog
       run: |
         # Your .droplist cleanup logic here...
-        
+
     # 9. Cloudflare Deployment Phase & Deploy
     - name: Cloudflare Deployment Phase
       working-directory: blog
@@ -147,14 +157,14 @@ jobs:
         BASE_URL="https://tejas.jog/"
         CLOUDFLARE_URL="https://tejasjog-blog.pages.dev/"
         find public-cf -type f -exec sed -i "s#$BASE_URL#$CLOUDFLARE_URL#g" {} +
-        
+
     - name: Deploy to Cloudflare Pages
-      uses: cloudflare/pages-action@v1 
+      uses: cloudflare/pages-action@v1
       with:
         apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         projectName: 'tejasjog-blog'
-        directory: 'blog/public-cf' 
+        directory: 'blog/public-cf'
         branch: 'master'
 
     # 10. CRITICAL SPACE CLEANUP
@@ -163,30 +173,41 @@ jobs:
       run: |
         echo "Cleaning up public-cf and public directories to free space..."
         rm -rf public-cf
-        rm -rf public 
+        rm -rf public
         echo "Cleanup complete. Disk usage after cleanup:"
         df -h
 
-    # 11. Modify responsiveImage Shortcode
-    - name: Modify responsiveImage Shortcode for Widths (for Netlify)
+    # 11. Modify responsiveImage Shortcode for Netlify Widths
+    - name: Modify responsiveImage Shortcode for Netlify Widths
       working-directory: blog
       run: |
-        SHORTCODE_PATHS=$(find . -path "*/shortcodes/responsiveImage.html" -type f)
-        OLD_TEXT=${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}
-        NEW_TEXT=${{ vars.NETLIFY_IMAGE_WIDTHS }}
-        if [ -n "$SHORTCODE_PATHS" ]; then
-          for SHORTCODE_PATH in $SHORTCODE_PATHS; do
-            sed -i "s|${OLD_TEXT}|{{ \$widths := ${NEW_TEXT} }}|g" "$SHORTCODE_PATH"
-          done
+        SHORTCODE_PATH=$(find . -path "*/shortcodes/responsiveImage.html" -type f | head -n 1)
+        OLD_TEXT='${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}'
+        NEW_TEXT='${{ vars.NETLIFY_IMAGE_WIDTHS }}'
+
+        if [ -n "$SHORTCODE_PATH" ]; then
+          echo "Found shortcode at: $SHORTCODE_PATH"
+
+          echo "--- Content BEFORE replacement (Netlify) ---"
+          cat "$SHORTCODE_PATH"
+
+          # Perform replacement
+          # Note: The 'sed' command now replaces the CLOUDFLARE variable string with the NETLIFY variable string.
+          sed -i "s|{{ \$widths := ${OLD_TEXT} }}|{{ \$widths := ${NEW_TEXT} }}|g" "$SHORTCODE_PATH"
+
+          echo "--- Content AFTER replacement (Netlify) ---"
+          cat "$SHORTCODE_PATH"
+        else
+          echo "Warning: responsiveImage.html not found."
         fi
-        
+
     # 12. Re-Build Hugo Site (for Netlify)
     - name: Re-Build Hugo Site (for Netlify)
       working-directory: blog
       run: |
         echo "Re-building Hugo site for Netlify deployment..."
         hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejas.jog/' }} --destination public --logLevel debug --environment production
-        
+
     # 13. Netlify Deployment Phase and Cleanup
     - name: Netlify Deployment Phase and Cleanup
       working-directory: blog
@@ -194,7 +215,7 @@ jobs:
         mkdir -p public-netlify
         cp -R public/* public-netlify/
         # Delete the main public folder immediately after copying to save space.
-        rm -rf public 
+        rm -rf public
 
         # Apply Netlify URL Fix
         BASE_URL="https://tejas.jog/"
@@ -203,7 +224,7 @@ jobs:
 
         echo "Starting Netlify deployment..."
         netlify deploy --prod --dir public-netlify --site ${{ secrets.NETLIFY_SITE_ID }}
-        
+
         # FINAL CLEANUP
         echo "Final cleanup of public-netlify directory..."
         rm -rf public-netlify
