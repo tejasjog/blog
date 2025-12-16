@@ -123,8 +123,8 @@ jobs:
           cat "$SHORTCODE_PATH"
 
           # Perform replacement
-          sed -i "s|${OLD_TEXT}|{{ \$widths := ${NEW_TEXT} }}|g" "$SHORTCODE_PATH"
-
+          sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$SHORTCODE_PATH"
+          
           echo "--- Content AFTER replacement (Cloudflare) ---"
           cat "$SHORTCODE_PATH"
         else
