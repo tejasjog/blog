@@ -19,7 +19,17 @@ jobs:
       NODE_VERSION: 20
 
     steps:
-
+    - name: Free Disk Space (Ubuntu)
+      uses: jlumbroso/free-disk-space@main
+      with:
+        # This removes large pre-installed tools to free up ~30GB+
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
+        docker-images: true
+        swap-storage: true
     # 0. CRITICAL: EARLY SYSTEM CLEANUP
     # This step is designed to aggressively free up space before any installation or cloning.
     - name: Aggressive Runner System Cleanup
