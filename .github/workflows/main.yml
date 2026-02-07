@@ -141,13 +141,11 @@ jobs:
           echo "Warning: responsiveImage.html not found."
         fi
 
-    # 7. Build Hugo Site (First Build - Where it was failing)
-    - name: Build Hugo Site (for Cloudflare)
+  # 7. Build Hugo Site (Single Build)
+    - name: Build Hugo Site
       working-directory: blog
       run: |
-        echo "Running Hugo build. Final disk check before build:"
-        df -h
-        hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejas.jog/' }} --destination public --logLevel debug --environment production
+        hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL }} --destination public --environment production
         echo "Hugo build complete. Disk usage after build:"
         du -sh public
         df -h
@@ -160,88 +158,35 @@ jobs:
       run: |
         # Your .droplist cleanup logic here...
 
-    # 9. Cloudflare Deployment Phase & Deploy
-    - name: Cloudflare Deployment Phase
-      working-directory: blog
-      run: |
-        mkdir -p public-cf
-        cp -R public/* public-cf/
-        BASE_URL="https://tejas.jog/"
-        CLOUDFLARE_URL="https://tejasjog-blog.pages.dev/"
-        find public-cf -type f -exec sed -i "s#$BASE_URL#$CLOUDFLARE_URL#g" {} +
-
+    # 9. Deploy to Cloudflare
     - name: Deploy to Cloudflare Pages
       uses: cloudflare/pages-action@v1
       with:
         apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         projectName: 'tejasjog-blog'
-        directory: 'blog/public-cf'
+        directory: 'blog/public'
         branch: 'master'
 
-    # 10. CRITICAL SPACE CLEANUP
-    - name: Cleanup Cloudflare Build Assets
-      working-directory: blog
+    # 10. In-Place URL Swap for Netlify
+    - name: Prepare for Netlify (In-Place Edit)
+      working-directory: blog/public
       run: |
-        echo "Cleaning up public-cf and public directories to free space..."
-        rm -rf public-cf
-        rm -rf public
-        echo "Cleanup complete. Disk usage after cleanup:"
-        df -h
+        CLOUDFLARE_URL="https://tejasjog-blog.pages.dev/"
+        NETLIFY_URL="https://tejasjog-blog.netlify.app/"
+        # Find and replace URLs directly in the build folder to save space
+        find . -type f -exec sed -i "s#$CLOUDFLARE_URL#$NETLIFY_URL#g" {} +
 
-    # 11. Modify responsiveImage Shortcode for Netlify Widths
-    - name: Modify responsiveImage Shortcode for Netlify Widths
-      working-directory: blog
-      run: |
-        SHORTCODE_PATH=$(find . -path "*/shortcodes/responsiveImage.html" -type f | head -n 1)
-        OLD_TEXT='${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}'
-        NEW_TEXT='${{ vars.NETLIFY_IMAGE_WIDTHS }}'
-
-        echo "vars.NETLIFY_IMAGE_WIDTHS: " ${{ vars.NETLIFY_IMAGE_WIDTHS }}
-        
-        if [ -n "$SHORTCODE_PATH" ]; then
-          echo "Found shortcode at: $SHORTCODE_PATH"
-
-          echo "--- Content BEFORE replacement (Netlify) ---"
-          cat "$SHORTCODE_PATH"
-
-          # Perform replacement
-          # Note: The 'sed' command now replaces the CLOUDFLARE variable string with the NETLIFY variable string.
-          sed -i "s|{{ \$widths := ${OLD_TEXT} }}|{{ \$widths := ${NEW_TEXT} }}|g" "$SHORTCODE_PATH"
-
-          echo "--- Content AFTER replacement (Netlify) ---"
-          cat "$SHORTCODE_PATH"
-        else
-          echo "Warning: responsiveImage.html not found."
-        fi
-
-    # 12. Re-Build Hugo Site (for Netlify)
-    - name: Re-Build Hugo Site (for Netlify)
-      working-directory: blog
-      run: |
-        echo "Re-building Hugo site for Netlify deployment..."
-        hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejas.jog/' }} --destination public --logLevel debug --environment production
-
-    # 13. Netlify Deployment Phase and Cleanup
+    # 11. Netlify Deployment Phase and Cleanup
     - name: Netlify Deployment Phase and Cleanup
       working-directory: blog
       run: |
-        mkdir -p public-netlify
-        cp -R public/* public-netlify/
-        # Delete the main public folder immediately after copying to save space.
-        rm -rf public
-
-        # Apply Netlify URL Fix
-        BASE_URL="https://tejas.jog/"
-        NETLIFY_URL="https://tejasjog-blog.netlify.app/"
-        find public-netlify -type f -exec sed -i "s#$BASE_URL#$NETLIFY_URL#g" {} +
-
         echo "Starting Netlify deployment..."
-        netlify deploy --prod --dir public-netlify --site ${{ secrets.NETLIFY_SITE_ID }}
+        netlify deploy --prod --dir public --site ${{ secrets.NETLIFY_SITE_ID }}
 
         # FINAL CLEANUP
         echo "Final cleanup of public-netlify directory..."
-        rm -rf public-netlify
+        rm -rf public
         echo "Final cleanup complete."
       env:
         NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ACCESS_TOKEN }}
