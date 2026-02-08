@@ -167,6 +167,8 @@ jobs:
       run: |
         echo "Starting Netlify deployment..."
         netlify deploy --prod --dir public --site ${{ secrets.NETLIFY_SITE_ID }}
+      env:
+        NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ACCESS_TOKEN }}        
 
     # 10. CRITICAL SPACE CLEANUP
     - name: Cleanup Netlify Build Assets
