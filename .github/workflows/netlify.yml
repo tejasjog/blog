@@ -1,5 +1,5 @@
 
-name: Deploy to Cloudflare Pages from GitLab - Hugo blog 
+name: Deploy to Netlify from GitLab - Hugo blog 
 
 on:
   workflow_dispatch:
@@ -117,8 +117,8 @@ jobs:
         # Install CLIs here. Since Node is set up, this should work.
         npm install -g wrangler netlify-cli
 
-    # 6. Modify responsiveImage Shortcode for Cloudflare Widths
-    - name: Modify responsiveImage Shortcode for Cloudflare Widths
+    # 6. Modify responsiveImage Shortcode for Netlify Widths
+    - name: Modify responsiveImage Shortcode for Netlify Widths
       working-directory: blog
       run: |
         SHORTCODE_PATH=$(find . -path "*/shortcodes/responsiveImage.html" -type f | head -n 1)
@@ -130,13 +130,13 @@ jobs:
         if [ -n "$SHORTCODE_PATH" ]; then
           echo "Found shortcode at: $SHORTCODE_PATH"
 
-          echo "--- Content BEFORE replacement (Cloudflare) ---"
+          echo "--- Content BEFORE replacement (Netlify) ---"
           cat "$SHORTCODE_PATH"
 
           # Perform replacement
           sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$SHORTCODE_PATH"
           
-          echo "--- Content AFTER replacement (Cloudflare) ---"
+          echo "--- Content AFTER replacement (Netlify) ---"
           cat "$SHORTCODE_PATH"
         else
           echo "Warning: responsiveImage.html not found."
@@ -169,7 +169,7 @@ jobs:
         netlify deploy --prod --dir public --site ${{ secrets.NETLIFY_SITE_ID }}
 
     # 10. CRITICAL SPACE CLEANUP
-    - name: Cleanup Cloudflare Build Assets
+    - name: Cleanup Netlify Build Assets
       working-directory: blog
       run: |
         echo "Cleaning up public directory to free space..."
