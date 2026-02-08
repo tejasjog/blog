@@ -1,4 +1,4 @@
-name: Deploy Hugo Blog from GitLab to Cloudflare Pages
+name: Deploy to Cloudflare Pages from GitLab - Hugo blog 
 
 on:
   workflow_dispatch:
@@ -141,11 +141,13 @@ jobs:
           echo "Warning: responsiveImage.html not found."
         fi
 
-  # 7. Build Hugo Site (Single Build)
-    - name: Build Hugo Site
+    # 7. Build Hugo Site (First Build - Where it was failing)
+    - name: Build Hugo Site (for Cloudflare)
       working-directory: blog
       run: |
-        hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL }} --destination public --environment production
+        echo "Running Hugo build. Final disk check before build:"
+        df -h
+        hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog-blog.pages.dev/' }} --destination public --logLevel debug --environment production
         echo "Hugo build complete. Disk usage after build:"
         du -sh public
         df -h
@@ -158,7 +160,7 @@ jobs:
       run: |
         # Your .droplist cleanup logic here...
 
-    # 9. Deploy to Cloudflare
+    # 9. Cloudflare Deployment Phase & Deploy
     - name: Deploy to Cloudflare Pages
       uses: cloudflare/pages-action@v1
       with:
@@ -168,25 +170,11 @@ jobs:
         directory: 'blog/public'
         branch: 'master'
 
-    # 10. In-Place URL Swap for Netlify
-    - name: Prepare for Netlify (In-Place Edit)
-      working-directory: blog/public
-      run: |
-        CLOUDFLARE_URL="https://tejasjog-blog.pages.dev/"
-        NETLIFY_URL="https://tejasjog-blog.netlify.app/"
-        # Find and replace URLs directly in the build folder to save space
-        find . -type f -exec sed -i "s#$CLOUDFLARE_URL#$NETLIFY_URL#g" {} +
-
-    # 11. Netlify Deployment Phase and Cleanup
-    - name: Netlify Deployment Phase and Cleanup
+    # 10. CRITICAL SPACE CLEANUP
+    - name: Cleanup Cloudflare Build Assets
       working-directory: blog
       run: |
-        echo "Starting Netlify deployment..."
-        netlify deploy --prod --dir public --site ${{ secrets.NETLIFY_SITE_ID }}
-
-        # FINAL CLEANUP
-        echo "Final cleanup of public-netlify directory..."
+        echo "Cleaning up public directory to free space..."
         rm -rf public
-        echo "Final cleanup complete."
-      env:
-        NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ACCESS_TOKEN }}
+        echo "Cleanup complete. Disk usage after cleanup:"
+        df -h
