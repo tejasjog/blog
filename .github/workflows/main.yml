@@ -147,7 +147,7 @@ jobs:
       run: |
         echo "Running Hugo build. Final disk check before build:"
         df -h
-        hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog-blog.pages.dev/' }} --destination public --environment production --logLevel debug
+        hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog-blog.pages.dev/' }} --destination public --environment production
         echo "Hugo build complete. Disk usage after build:"
         du -sh public
         df -h
