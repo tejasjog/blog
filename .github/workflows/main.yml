@@ -14,8 +14,8 @@ jobs:
       id-token: write # Required for deploy-pages action
 
     env:
-      DART_SASS_VERSION: 1.77.4
-      HUGO_VERSION: 0.148.0
+      DART_SASS_VERSION: 1.97.3
+      HUGO_VERSION: 0.155.3
       NODE_VERSION: 20
 
     steps:
