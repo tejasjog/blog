@@ -5,13 +5,11 @@ on:
 
 jobs:
   deploy:
-    # IMPORTANT: Consider using 'ubuntu-20.04' instead of 'ubuntu-latest'
-    # if 'ubuntu-latest' (currently 24.04) has less disk space on your self-hosted runner.
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pages: write
-      id-token: write # Required for deploy-pages action
+      id-token: write
 
     env:
       DART_SASS_VERSION: 1.97.3
@@ -19,148 +17,77 @@ jobs:
       NODE_VERSION: 20
 
     steps:
-    - name: Free Disk Space (Ubuntu)
-      uses: jlumbroso/free-disk-space@main
-      with:
-        # This removes large pre-installed tools to free up ~30GB+
-        tool-cache: false
-        android: true
-        dotnet: true
-        haskell: true
-        large-packages: true
-        docker-images: true
-        swap-storage: true
-    # 0. CRITICAL: EARLY SYSTEM CLEANUP
-    # This step is designed to aggressively free up space before any installation or cloning.
-    - name: Aggressive Runner System Cleanup
+    # 0. EARLY SYSTEM CLEANUP & LOG CLEARING
+    - name: Maximize Runner Space
       run: |
-        echo "Starting aggressive system cleanup..."
-        # 1. Clean apt package cache
-        sudo apt-get autoremove -y
-        sudo apt-get clean
-
-        # 2. Remove common large tools/caches not needed for this workflow (e.g., Azure, Docker images)
-        # Check if these directories exist before trying to remove them.
-        echo "Removing large tool caches and unnecessary packages..."
-
-        # Docker images can be huge; removing them is often the biggest win
-        if command -v docker &> /dev/null; then
-          sudo docker system prune --all --force
-        fi
-
-        # Remove large .NET and Android SDK packages
+        echo "Clearing runner logs and large packages..."
+        # Clear the specific directory that caused the previous crash
+        sudo rm -rf /home/runner/actions-runner/_diag/* # Remove massive pre-installed tools
         sudo rm -rf /usr/share/dotnet
         sudo rm -rf /usr/local/lib/android
         sudo rm -rf /opt/ghc
-
-        # Print disk usage after initial cleanup
-        echo "Disk usage after aggressive cleanup:"
+        sudo rm -rf "/usr/local/share/boost"
+        
+        # Clean docker and apt
+        sudo docker system prune --all --force
+        sudo apt-get autoremove -y
+        sudo apt-get clean
         df -h
 
-    # 1. Checkout Code from GitLab
-    - name: Checkout Code with Submodule Authentication
+    # 1. Checkout Code
+    - name: Checkout Code from GitLab
       env:
         GIT_OAUTH_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
       run: |
         git config --global url."https://oauth2:$GIT_OAUTH_TOKEN@gitlab.com".insteadOf "https://gitlab.com"
-        git clone https://gitlab.com/tejasjog/blog.git
+        git clone --recursive https://gitlab.com/tejasjog/blog.git
         cd blog
 
-    # 2. Run Submodule Update and Cleanup .git files
-    - name: Update Submodules and Cleanup Content Directories
-      working-directory: blog
-      run: |
-        echo "Attempting to update submodules..."
-        git submodule update --init --force --recursive --remote --verbose
-
-        echo "Total files in repository (excluding .git):"
-        find . -path ./.git -prune -o -type f -print | wc -l
-
-    # 3. Optimized Node.js Setup
+    # 2. Optimized Node.js Setup
     - name: Set up Node.js Environment
       uses: actions/setup-node@v4
       with:
         node-version: ${{ env.NODE_VERSION }}
 
-    # 4. Install Brotli, Dart Sass, and Hugo (Manual install with immediate cleanup)
-    - name: Install Dependencies with Cleanup
+    # 3. Install Hugo & Sass (Binary-only to save space)
+    - name: Install Dependencies
       run: |
-        echo "Installing system dependencies: brotli, Dart Sass, and Hugo..."
-        sudo apt-get update
-        sudo apt-get install -y brotli
+        # Install Hugo Extended Binary
+        curl -L -o hugo.tar.gz https://github.com/gohugoio/hugo/releases/download/v${{ env.HUGO_VERSION }}/hugo_extended_${{ env.HUGO_VERSION }}_linux-amd64.tar.gz
+        tar -xzf hugo.tar.gz hugo
+        sudo mv hugo /usr/local/bin/
+        rm hugo.tar.gz
 
-        # Install Dart Sass
-        DART_SASS_FILENAME="dart-sass-${{ env.DART_SASS_VERSION }}-linux-x64.tar.gz"
-        curl -LJO https://github.com/sass/dart-sass/releases/download/${{ env.DART_SASS_VERSION }}/$DART_SASS_FILENAME
-        tar -xf $DART_SASS_FILENAME
-        sudo cp -r dart-sass/* /usr/local/bin/
-        rm -rf dart-sass* # CRITICAL CLEANUP 1
+        # Install Dart Sass Binary
+        curl -L -o sass.tar.gz https://github.com/sass/dart-sass/releases/download/${{ env.DART_SASS_VERSION }}/dart-sass-${{ env.DART_SASS_VERSION }}-linux-x64.tar.gz
+        tar -xzf sass.tar.gz
+        sudo cp dart-sass/sass /usr/local/bin/
+        rm -rf sass.tar.gz dart-sass
 
-        # Install Hugo
-        HUGO_DEB_FILENAME="hugo_extended_${{ env.HUGO_VERSION }}_linux-amd64.deb"
-        sudo curl -LJO https://github.com/gohugoio/hugo/releases/download/v${{ env.HUGO_VERSION }}/$HUGO_DEB_FILENAME
-        sudo apt-get install -y ./$HUGO_DEB_FILENAME
-        sudo rm $HUGO_DEB_FILENAME # CRITICAL CLEANUP 2
-
-        # FINAL PACKAGE CLEANUP
-        sudo apt-get autoremove -y
-        sudo apt-get clean
-        echo "Dependencies installed. Disk usage check before npm install:"
-        df -h
-
-    # 5. Install Node Dependencies and Global CLIs
-    - name: Install Node Dependencies and Global CLIs
+    # 4. Install Node Dependencies (Netlify CLI removed)
+    - name: Install Node Dependencies and Wrangler
       working-directory: blog
       run: |
-        npm install
-        # Install CLIs here. Since Node is set up, this should work.
-        npm install -g wrangler netlify-cli
+        npm install --no-audit --no-fund
+        npm install -g wrangler
 
-    # 6. Modify responsiveImage Shortcode for Cloudflare Widths
-    - name: Modify responsiveImage Shortcode for Cloudflare Widths
+    # 5. Modify Shortcode
+    - name: Modify responsiveImage Shortcode
       working-directory: blog
       run: |
         SHORTCODE_PATH=$(find . -path "*/shortcodes/responsiveImage.html" -type f | head -n 1)
-        OLD_TEXT='slice 1600'
-        NEW_TEXT='${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}'
-
-        echo "vars.CLOUDFLARE_IMAGE_WIDTHS: " ${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}
-        
         if [ -n "$SHORTCODE_PATH" ]; then
-          echo "Found shortcode at: $SHORTCODE_PATH"
-
-          echo "--- Content BEFORE replacement (Cloudflare) ---"
-          cat "$SHORTCODE_PATH"
-
-          # Perform replacement
-          sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$SHORTCODE_PATH"
-          
-          echo "--- Content AFTER replacement (Cloudflare) ---"
-          cat "$SHORTCODE_PATH"
-        else
-          echo "Warning: responsiveImage.html not found."
+          sed -i "s|slice 1600|${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}|g" "$SHORTCODE_PATH"
         fi
 
-    # 7. Build Hugo Site (First Build - Where it was failing)
-    - name: Build Hugo Site (for Cloudflare)
+    # 6. Build Hugo Site
+    - name: Build Hugo Site
       working-directory: blog
       run: |
-        echo "Running Hugo build. Final disk check before build:"
-        df -h
         hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog-blog.pages.dev/' }} --destination public --environment production
-        echo "Hugo build complete. Disk usage after build:"
-        du -sh public
         df -h
 
-    # --- Deployment steps follow (using the cleanup structure from the previous fix) ---
-
-    # 8. Cleanup .droplist Files (Run before deployment)
-    - name: Cleanup .droplist Files and Report Size
-      working-directory: blog
-      run: |
-        # Your .droplist cleanup logic here...
-
-    # 9. Cloudflare Deployment Phase & Deploy
+    # 7. Deploy to Cloudflare
     - name: Deploy to Cloudflare Pages
       uses: cloudflare/pages-action@v1
       with:
@@ -170,11 +97,9 @@ jobs:
         directory: 'blog/public'
         branch: 'master'
 
-    # 10. CRITICAL SPACE CLEANUP
-    - name: Cleanup Cloudflare Build Assets
-      working-directory: blog
+    # 8. FINAL CLEANUP
+    - name: Post-Build Cleanup
+      if: always()
       run: |
-        echo "Cleaning up public directory to free space..."
-        rm -rf public
-        echo "Cleanup complete. Disk usage after cleanup:"
+        rm -rf blog/public
         df -h
