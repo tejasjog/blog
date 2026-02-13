@@ -84,7 +84,7 @@ jobs:
     - name: Build Hugo Site
       working-directory: blog
       run: |
-        hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog-blog.pages.dev/' }} --destination public --environment production
+        hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog-blog.pages.dev/' }} --destination public --environment production --logLevel debug
         df -h
 
     # 7. Deploy to Cloudflare
