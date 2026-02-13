@@ -63,7 +63,7 @@ jobs:
         GIT_OAUTH_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
       run: |
         git config --global url."https://oauth2:$GIT_OAUTH_TOKEN@gitlab.com".insteadOf "https://gitlab.com"
-        git clone https://gitlab.com/tejasjog/blog.git
+        git clone --depth 1 https://gitlab.com/tejasjog/blog.git
         cd blog
 
     # 2. Run Submodule Update and Cleanup .git files
