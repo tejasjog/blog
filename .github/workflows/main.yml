@@ -198,6 +198,11 @@ jobs:
         fi
 
     # 9. Cloudflare Deployment Phase & Deploy
+    - name: Echo public folder size
+      run: |
+        echo "Calculating the size of the public folder..."
+        du -sh blog/public
+
     - name: Deploy to Cloudflare Pages
       uses: cloudflare/pages-action@v1
       with:
