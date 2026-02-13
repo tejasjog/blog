@@ -162,7 +162,7 @@ jobs:
           echo "--- Content AFTER replacement (Cloudflare) ---"
           cat "$SHORTCODE_PATH"
         else
-          echo "Warning: responsiveImage.html not found."
+          echo "Warning: img.html not found."
         fi
         
     # 7. Build Hugo Site (First Build - Where it was failing)
