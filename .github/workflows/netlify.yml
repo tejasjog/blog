@@ -105,6 +105,30 @@ jobs:
           echo "Warning: responsiveImage.html not found."
         fi
 
+    - name: Modify img Shortcode for Cloudflare Widths
+      working-directory: blog
+      run: |
+        SHORTCODE_PATH=$(find . -path "*/shortcodes/img.html" -type f | head -n 1)
+        OLD_TEXT='1600'
+        NEW_TEXT='${{ vars.NETLIFY_IMAGE_WIDTHS_IMG }}'
+
+        echo "vars.NETLIFY_IMAGE_WIDTHS_IMG: " ${{ vars.NETLIFY_IMAGE_WIDTHS_IMG }}
+        
+        if [ -n "$SHORTCODE_PATH" ]; then
+          echo "Found shortcode at: $SHORTCODE_PATH"
+
+          echo "--- Content BEFORE replacement (Cloudflare) ---"
+          cat "$SHORTCODE_PATH"
+
+          # Perform replacement
+          sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$SHORTCODE_PATH"
+          
+          echo "--- Content AFTER replacement (Cloudflare) ---"
+          cat "$SHORTCODE_PATH"
+        else
+          echo "Warning: img.html not found."
+        fi
+
     # 7. Build Hugo Site
     - name: Build Hugo Site (for Netlify)
       working-directory: blog
