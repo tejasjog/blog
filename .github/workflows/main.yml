@@ -71,7 +71,7 @@ jobs:
       working-directory: blog
       run: |
         echo "Attempting to update submodules..."
-        git submodule update --init --force --recursive --remote --verbose
+        git submodule update --init --force --recursive --remote --verbose --depth 1
 
         echo "Total files in repository (excluding .git):"
         find . -path ./.git -prune -o -type f -print | wc -l
