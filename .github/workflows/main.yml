@@ -116,7 +116,7 @@ jobs:
         # Install CLIs here. Since Node is set up, this should work.
         npm install -g wrangler
 
-    # 6. Modify responsiveImage Shortcode for Cloudflare Widths
+    # 6. Modify for Cloudflare Widths
     - name: Modify responsiveImage Shortcode for Cloudflare Widths
       working-directory: blog
       run: |
@@ -188,6 +188,19 @@ jobs:
         else
           echo "Warning: render-image.html not found."
         fi
+
+    # 6. Modify for Yandex Verification Tag for Cloudflare
+    - name: Update Yandex Verification Tag for Cloudflare
+      working-directory: blog
+      run: |
+        echo "--- Verification tag BEFORE replacement ---"
+        grep "SiteVerificationTag: yandex-SiteVerificationTag" hugo.yaml || echo "Tag not found!"
+
+        echo "Updating Yandex SiteVerificationTag for Cloudflare..."
+        sed -i "s/SiteVerificationTag: yandex-SiteVerificationTag/SiteVerificationTag: ${{ vars.CLOUDFLARE_YANDEX_SITEVERIFICATIONTAG }}/g" hugo.yaml
+        
+        echo "--- Verification tag AFTER replacement ---"
+        grep "SiteVerificationTag" hugo.yaml
         
     # 7. Build Hugo Site (First Build - Where it was failing)
     - name: Build Hugo Site (for Cloudflare)
