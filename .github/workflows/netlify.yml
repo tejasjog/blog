@@ -111,7 +111,7 @@ jobs:
         # Install CLIs here. Since Node is set up, this should work.
         npm install -g netlify-cli
 
-    # 6. Modify Shortcodes for Netlify Widths
+    # 6. Modify for Netlify Widths
     - name: Modify responsiveImage Shortcode for Netlify Widths
       working-directory: blog
       run: |
@@ -171,6 +171,19 @@ jobs:
         else
           echo "Warning: render-image.html not found."
         fi
+
+    # 6.5. Modify for Yandex Verification Tag for Netlify
+    - name: Update Yandex Verification Tag for Netlify
+      working-directory: blog
+      run: |
+        echo "--- Verification tag BEFORE replacement ---"
+        grep "SiteVerificationTag: yandex-SiteVerificationTag" hugo.yaml || echo "Tag not found!"
+
+        echo "Updating Yandex SiteVerificationTag for Netlify..."
+        sed -i "s/SiteVerificationTag: yandex-SiteVerificationTag/SiteVerificationTag: ${{ vars.NETLIFY_YANDEX_SITEVERIFICATIONTAG }}/g" hugo.yaml
+        
+        echo "--- Verification tag AFTER replacement ---"
+        grep "SiteVerificationTag" hugo.yaml
         
     # 7. Build Hugo Site
     - name: Build Hugo Site (for Netlify)
