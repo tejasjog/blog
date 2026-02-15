@@ -202,6 +202,28 @@ jobs:
 
     # --- Deployment steps follow (using the cleanup structure from the previous fix) ---
 
+    # 7.5. Submit to IndexNow (Batch Submission for Cloudflare)
+    - name: Extract URLs and Submit to IndexNow
+      working-directory: blog
+      run: |
+        echo "Generating API Key file for verification..."
+        echo "90713259142C4858C5DB91DF25E69DBF" > public/90713259142C4858C5DB91DF25E69DBF.txt
+        
+        echo "Extracting URLs from sitemap.xml..."
+        URLS=$(grep -Po '(?<=<loc>)([^<]+)' public/sitemap.xml | sed 's/^/"/;s/$/"/' | paste -sd "," -)
+        
+        echo "Submitting batch request to IndexNow..."
+        JSON_PAYLOAD='{
+          "host": "tejasjog-blog.pages.dev",
+          "key": "90713259142C4858C5DB91DF25E69DBF",
+          "keyLocation": "https://tejasjog-blog.pages.dev/90713259142C4858C5DB91DF25E69DBF.txt",
+          "urlList": ['"$URLS"']
+        }'
+        
+        curl -X POST "https://api.indexnow.org/IndexNow" \
+             -H "Content-Type: application/json; charset=utf-8" \
+             -d "$JSON_PAYLOAD" -v
+             
 # 8. Cleanup .droplist Files (Run before deployment)
     - name: Cleanup .droplist Files and Report Size
       working-directory: blog
