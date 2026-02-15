@@ -183,7 +183,7 @@ jobs:
         du -sh public
         df -h
 
-# 7.5. Submit to IndexNow (Batch Submission)
+    # 7.5. Submit to IndexNow (Batch Submission)
     - name: Extract URLs and Submit to IndexNow
       working-directory: blog
       run: |
