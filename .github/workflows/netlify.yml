@@ -5,6 +5,7 @@ on:
 
 jobs:
   deploy:
+    # IMPORTANT: Consistent with main.yml runner suggestion
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -20,6 +21,7 @@ jobs:
     - name: Free Disk Space (Ubuntu)
       uses: jlumbroso/free-disk-space@main
       with:
+        # This removes large pre-installed tools to free up ~30GB+
         tool-cache: false
         android: true
         dotnet: true
@@ -32,17 +34,25 @@ jobs:
     - name: Aggressive Runner System Cleanup
       run: |
         echo "Starting aggressive system cleanup..."
+        # 1. Clean apt package cache
         sudo apt-get autoremove -y
         sudo apt-get clean
+
+        # 2. Remove common large tools/caches not needed
+        echo "Removing large tool caches and unnecessary packages..."
         if command -v docker &> /dev/null; then
           sudo docker system prune --all --force
         fi
+
         sudo rm -rf /usr/share/dotnet
         sudo rm -rf /usr/local/lib/android
         sudo rm -rf /opt/ghc
+
+        # Print disk usage after initial cleanup
+        echo "Disk usage after aggressive cleanup:"
         df -h
 
-    # 1. Checkout Code from GitLab (Updated with depth 1)
+    # 1. Checkout Code from GitLab
     - name: Checkout Code with Submodule Authentication
       env:
         GIT_OAUTH_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
@@ -51,12 +61,13 @@ jobs:
         git clone --depth 1 https://gitlab.com/tejasjog/blog.git
         cd blog
 
-    # 2. Run Submodule Update and Cleanup .git files (Updated with depth 1)
+    # 2. Run Submodule Update and Cleanup .git files
     - name: Update Submodules and Cleanup Content Directories
       working-directory: blog
       run: |
         echo "Attempting to update submodules..."
         git submodule update --init --force --recursive --remote --verbose --depth 1
+
         echo "Total files in repository (excluding .git):"
         find . -path ./.git -prune -o -type f -print | wc -l
 
@@ -66,22 +77,30 @@ jobs:
       with:
         node-version: ${{ env.NODE_VERSION }}
 
-    # 4. Install Brotli, Dart Sass, and Hugo
+    # 4. Install Brotli, Dart Sass, and Hugo (Manual install with immediate cleanup)
     - name: Install Dependencies with Cleanup
       run: |
+        echo "Installing system dependencies: brotli, Dart Sass, and Hugo..."
         sudo apt-get update
         sudo apt-get install -y brotli
+
+        # Install Dart Sass
         DART_SASS_FILENAME="dart-sass-${{ env.DART_SASS_VERSION }}-linux-x64.tar.gz"
         curl -LJO https://github.com/sass/dart-sass/releases/download/${{ env.DART_SASS_VERSION }}/$DART_SASS_FILENAME
         tar -xf $DART_SASS_FILENAME
         sudo cp -r dart-sass/* /usr/local/bin/
-        rm -rf dart-sass*
+        rm -rf dart-sass* # CRITICAL CLEANUP 1
+
+        # Install Hugo
         HUGO_DEB_FILENAME="hugo_extended_${{ env.HUGO_VERSION }}_linux-amd64.deb"
         sudo curl -LJO https://github.com/gohugoio/hugo/releases/download/v${{ env.HUGO_VERSION }}/$HUGO_DEB_FILENAME
         sudo apt-get install -y ./$HUGO_DEB_FILENAME
-        sudo rm $HUGO_DEB_FILENAME
+        sudo rm $HUGO_DEB_FILENAME # CRITICAL CLEANUP 2
+
+        # FINAL PACKAGE CLEANUP
         sudo apt-get autoremove -y
         sudo apt-get clean
+        echo "Dependencies installed. Disk usage check before npm install:"
         df -h
 
     # 5. Install Node Dependencies and Global CLIs
@@ -89,23 +108,31 @@ jobs:
       working-directory: blog
       run: |
         npm install
+        # Install CLIs here. Since Node is set up, this should work.
         npm install -g netlify-cli
 
-    # 6. Modify responsiveImage Shortcode for Netlify Widths
+    # 6. Modify Shortcodes for Netlify Widths
     - name: Modify responsiveImage Shortcode for Netlify Widths
       working-directory: blog
       run: |
         SHORTCODE_PATH=$(find . -path "*/shortcodes/responsiveImage.html" -type f | head -n 1)
         OLD_TEXT='slice 1600'
         NEW_TEXT='${{ vars.NETLIFY_IMAGE_WIDTHS }}'
+
+        echo "vars.NETLIFY_IMAGE_WIDTHS: " ${{ vars.NETLIFY_IMAGE_WIDTHS }}
+        
         if [ -n "$SHORTCODE_PATH" ]; then
+          echo "Found shortcode at: $SHORTCODE_PATH"
+          echo "--- Content BEFORE replacement (Netlify) ---"
+          cat "$SHORTCODE_PATH"
           sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$SHORTCODE_PATH"
-          echo "Updated shortcode with: $NEW_TEXT"
+          echo "--- Content AFTER replacement (Netlify) ---"
+          cat "$SHORTCODE_PATH"
         else
           echo "Warning: responsiveImage.html not found."
         fi
 
-    - name: Modify img Shortcode for Cloudflare Widths
+    - name: Modify img Shortcode for Netlify Widths
       working-directory: blog
       run: |
         SHORTCODE_PATH=$(find . -path "*/shortcodes/img.html" -type f | head -n 1)
@@ -116,75 +143,106 @@ jobs:
         
         if [ -n "$SHORTCODE_PATH" ]; then
           echo "Found shortcode at: $SHORTCODE_PATH"
-
-          echo "--- Content BEFORE replacement (Cloudflare) ---"
+          echo "--- Content BEFORE replacement (Netlify) ---"
           cat "$SHORTCODE_PATH"
-
-          # Perform replacement
           sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$SHORTCODE_PATH"
-          
-          echo "--- Content AFTER replacement (Cloudflare) ---"
+          echo "--- Content AFTER replacement (Netlify) ---"
           cat "$SHORTCODE_PATH"
         else
           echo "Warning: img.html not found."
         fi
 
+    - name: Modify default render-image markup for Netlify Widths
+      working-directory: blog
+      run: |
+        SHORTCODE_PATH=$(find . -path "*/_default/_markup/render-image.html" -type f | head -n 1)
+        OLD_TEXT='1600'
+        NEW_TEXT='${{ vars.NETLIFY_IMAGE_WIDTHS_IMG }}'
+
+        echo "vars.NETLIFY_IMAGE_WIDTHS_IMG: " ${{ vars.NETLIFY_IMAGE_WIDTHS_IMG }}
+        
+        if [ -n "$SHORTCODE_PATH" ]; then
+          echo "Found shortcode at: $SHORTCODE_PATH"
+          echo "--- Content BEFORE replacement (Netlify) ---"
+          cat "$SHORTCODE_PATH"
+          sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$SHORTCODE_PATH"
+          echo "--- Content AFTER replacement (Netlify) ---"
+          cat "$SHORTCODE_PATH"
+        else
+          echo "Warning: render-image.html not found."
+        fi
+        
     # 7. Build Hugo Site
     - name: Build Hugo Site (for Netlify)
       working-directory: blog
       run: |
-        hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog-blog.netlify.app/' }} --destination public --environment production
+        echo "Running Hugo build. Final disk check before build:"
+        df -h
+        hugo --gc --minify --baseURL ${{ vars.CI_NETLIFY_URL || 'https://tejasjog-blog.netlify.app/' }} --destination public --environment production
+        echo "Hugo build complete. Disk usage after build:"
         du -sh public
+        df -h
 
-    # 8. Cleanup .droplist Files (Logic synchronized from main.yml)
+    # 8. Cleanup .droplist Files (Run before deployment)
     - name: Cleanup .droplist Files and Report Size
       working-directory: blog
       run: |
         echo "Searching for .droplist files..."
         DROPLIST_FILES=$(find . -name "*.droplist")
+        
         if [ -z "$DROPLIST_FILES" ]; then
-          echo "No .droplist files found."
+          echo "No .droplist files found. Exiting cleanup."
         else
           for DROPLIST_FILE in $DROPLIST_FILES; do
+            echo "Processing $DROPLIST_FILE..."
             DROPLIST_DIR=$(dirname "$DROPLIST_FILE")
+            
             while IFS= read -r FILE_TO_DELETE || [ -n "$FILE_TO_DELETE" ]; do
               if [ -z "$FILE_TO_DELETE" ]; then continue; fi
               filename="${FILE_TO_DELETE%.*}"
               extension="${FILE_TO_DELETE##*.}"
+              
               if [ "$filename" != "$FILE_TO_DELETE" ]; then
                 UPPERCASE_EXTENSION="${extension^^}"
                 LOWERCASE_EXTENSION=$(echo "$extension" | tr '[:upper:]' '[:lower:]')
                 for path in "$DROPLIST_DIR/${filename}.${LOWERCASE_EXTENSION}" "$DROPLIST_DIR/${filename}.${UPPERCASE_EXTENSION}"; do
                   if [ -f "$path" ]; then
-                    rm "$path" && echo "Deleted: $path"
+                    echo "Deleting file: $path"
+                    rm "$path"
                   fi
                 done
               else
-                if [ -f "$DROPLIST_DIR/$FILE_TO_DELETE" ]; then
-                  rm "$DROPLIST_DIR/$FILE_TO_DELETE" && echo "Deleted: $FILE_TO_DELETE"
+                FULL_PATH="$DROPLIST_DIR/$FILE_TO_DELETE"
+                if [ -f "$FULL_PATH" ]; then
+                  echo "Deleting file: $FULL_PATH"
+                  rm "$FULL_PATH"
                 fi
               fi
             done < "$DROPLIST_FILE"
+            echo "Finished processing. Deleting control file: $DROPLIST_FILE"
+            rm "$DROPLIST_FILE"
           done
         fi
 
-    # 9. Netlify Deployment Phase & Size Reporting
+    # 9. Netlify Deployment Phase & Deploy
     - name: Echo public folder size
       run: |
         echo "Calculating the size of the public folder..."
         du -sh blog/public
 
-    - name: Netlify Deployment Phase and Cleanup
+    - name: Netlify Deployment Phase
       working-directory: blog
       run: |
         echo "Starting Netlify deployment..."
         netlify deploy --prod --dir public --site ${{ secrets.NETLIFY_SITE_ID }}
       env:
-        NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ACCESS_TOKEN }}        
+        NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ACCESS_TOKEN }}
 
     # 10. CRITICAL SPACE CLEANUP
     - name: Cleanup Netlify Build Assets
       working-directory: blog
       run: |
+        echo "Cleaning up public directory to free space..."
         rm -rf public
+        echo "Cleanup complete. Disk usage after cleanup:"
         df -h
