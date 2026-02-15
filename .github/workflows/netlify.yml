@@ -155,7 +155,7 @@ jobs:
     - name: Modify default render-image markup for Netlify Widths
       working-directory: blog
       run: |
-        SHORTCODE_PATH=$(find . -path "*/_default/_markup/render-image.html" -type f | head -n 1)
+        SHORTCODE_PATH=$(find . -path "*/layouts/_default/_markup/render-image.html" -type f | head -n 1)
         OLD_TEXT='1600'
         NEW_TEXT='${{ vars.NETLIFY_IMAGE_WIDTHS_IMG }}'
 
