@@ -215,7 +215,7 @@ jobs:
 
     # --- Deployment steps follow (using the cleanup structure from the previous fix) ---
              
-# 8. Cleanup .droplist Files (Run before deployment)
+    # 8. Cleanup .droplist Files (Run before deployment)
     - name: Cleanup .droplist Files and Report Size
       working-directory: blog
       run: |
