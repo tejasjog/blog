@@ -196,32 +196,6 @@ jobs:
         du -sh public
         df -h
 
-    # 7.5. Submit to IndexNow (Batch Submission)
-    - name: Extract URLs and Submit to IndexNow
-      working-directory: blog
-      run: |
-        echo "Generating API Key file for verification..."
-        # Create the verification file in the public directory before deployment
-        echo "90713259142C4858C5DB91DF25E69DBF" > public/90713259142C4858C5DB91DF25E69DBF.txt
-        
-        echo "Extracting URLs from sitemap.xml..."
-        # Use grep and sed to extract all <loc> tags from the built sitemap
-        URLS=$(grep -Po '(?<=<loc>)([^<]+)' public/sitemap.xml | sed 's/^/"/;s/$/"/' | paste -sd "," -)
-        
-        echo "Submitting batch request to IndexNow..."
-        # Format the JSON payload for bulk submission
-        JSON_PAYLOAD='{
-          "host": "tejasjog-blog.netlify.app",
-          "key": "90713259142C4858C5DB91DF25E69DBF",
-          "keyLocation": "https://tejasjog-blog.netlify.app/90713259142C4858C5DB91DF25E69DBF.txt",
-          "urlList": ['"$URLS"']
-        }'
-        
-        # Submit to the universal IndexNow endpoint (notifies Bing, Yandex, etc.)
-        curl -X POST "https://api.indexnow.org/IndexNow" \
-             -H "Content-Type: application/json; charset=utf-8" \
-             -d "$JSON_PAYLOAD" -v
-
     # 8. Cleanup .droplist Files (Run before deployment)
     - name: Cleanup .droplist Files and Report Size
       working-directory: blog
@@ -277,7 +251,39 @@ jobs:
       env:
         NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ACCESS_TOKEN }}
 
-    # 10. CRITICAL SPACE CLEANUP
+    # 10. Extract URLs and Submit to IndexNow (Moved after deployment)
+    - name: Extract URLs and Submit to IndexNow
+      working-directory: blog
+      run: |
+        echo "Waiting for Netlify deployment to propagate..."
+        # Wait 30 seconds to ensure the new deployment is live across edge nodes
+        sleep 30 
+        
+        # Verify the key file is actually reachable before pinging IndexNow
+        KEY_URL="https://tejasjog-blog.netlify.app/90713259142C4858C5DB91DF25E69DBF.txt"
+        STATUS=$(curl -o /dev/null -s -w "%{http_code}" "$KEY_URL")
+        
+        if [ "$STATUS" -ne 200 ]; then
+          echo "Error: Key file is not live yet (Status: $STATUS). Aborting IndexNow ping."
+          exit 0 # Exit gracefully so the workflow doesn't fail
+        fi
+
+        echo "Key is live. Extracting URLs from sitemap.xml..."
+        URLS=$(grep -Po '(?<=<loc>)([^<]+)' public/sitemap.xml | sed 's/^/"/;s/$/"/' | paste -sd "," -)
+        
+        echo "Submitting batch request to IndexNow..."
+        JSON_PAYLOAD='{
+          "host": "tejasjog-blog.netlify.app",
+          "key": "90713259142C4858C5DB91DF25E69DBF",
+          "keyLocation": "https://tejasjog-blog.netlify.app/90713259142C4858C5DB91DF25E69DBF.txt",
+          "urlList": ['"$URLS"']
+        }'
+        
+        curl -X POST "https://api.indexnow.org/IndexNow" \
+             -H "Content-Type: application/json; charset=utf-8" \
+             -d "$JSON_PAYLOAD" -v
+
+    # 11. CRITICAL SPACE CLEANUP
     - name: Cleanup Netlify Build Assets
       working-directory: blog
       run: |
@@ -285,3 +291,4 @@ jobs:
         rm -rf public
         echo "Cleanup complete. Disk usage after cleanup:"
         df -h
+        
