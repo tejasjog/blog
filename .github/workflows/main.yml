@@ -1,4 +1,4 @@
-name: Main Deploy to GitHub Pages from GitLab - Hugo blog 
+name: Deploy to GitHub Pages from GitLab - Hugo blog 
 
 on:
   workflow_dispatch:
