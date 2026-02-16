@@ -132,45 +132,39 @@ jobs:
           echo "Warning: responsiveImage.html not found."
         fi
 
-    - name: Modify img Shortcode for Netlify Widths
+    - name: Batch Update Image Widths to Netlify Settings
       working-directory: blog
       run: |
-        SHORTCODE_PATH=$(find . -path "*/shortcodes/img.html" -type f | head -n 1)
-        OLD_TEXT='1600'
+        # Define the target variable from GitHub Vars specific to Netlify
         NEW_TEXT='${{ vars.NETLIFY_IMAGE_WIDTHS_IMG }}'
-
-        echo "vars.NETLIFY_IMAGE_WIDTHS_IMG: " ${{ vars.NETLIFY_IMAGE_WIDTHS_IMG }}
-        
-        if [ -n "$SHORTCODE_PATH" ]; then
-          echo "Found shortcode at: $SHORTCODE_PATH"
-          echo "--- Content BEFORE replacement (Netlify) ---"
-          cat "$SHORTCODE_PATH"
-          sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$SHORTCODE_PATH"
-          echo "--- Content AFTER replacement (Netlify) ---"
-          cat "$SHORTCODE_PATH"
-        else
-          echo "Warning: img.html not found."
-        fi
-
-    - name: Modify default render-image markup for Netlify Widths
-      working-directory: blog
-      run: |
-        SHORTCODE_PATH=$(find . -path "*/_default/_markup/render-image.html" -type f -not -path "./themes/*" | head -n 1)
         OLD_TEXT='1600'
-        NEW_TEXT='${{ vars.NETLIFY_IMAGE_WIDTHS_IMG }}'
-
-        echo "vars.NETLIFY_IMAGE_WIDTHS_IMG: " ${{ vars.NETLIFY_IMAGE_WIDTHS_IMG }}
         
-        if [ -n "$SHORTCODE_PATH" ]; then
-          echo "Found shortcode at: $SHORTCODE_PATH"
-          echo "--- Content BEFORE replacement (Netlify) ---"
-          cat "$SHORTCODE_PATH"
-          sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$SHORTCODE_PATH"
-          echo "--- Content AFTER replacement (Netlify) ---"
-          cat "$SHORTCODE_PATH"
-        else
-          echo "Warning: render-image.html not found."
-        fi
+        echo "Target Netlify Widths: $NEW_TEXT"
+
+        # Define the list of files to process
+        FILES_TO_EDIT=(
+          "$(find . -path "*/_default/_markup/render-image.html" -type f -not -path "./themes/*" | head -n 1)"
+          "$(find . -path "*/layouts/shortcodes/img.html" -type f | head -n 1)"
+          "$(find . -path "*/layouts/partials/cover_image.html" -type f | head -n 1)"
+        )
+
+        for FILE_PATH in "${FILES_TO_EDIT[@]}"; do
+          if [ -f "$FILE_PATH" ]; then
+            echo "========================================================"
+            echo "Processing: $FILE_PATH"
+            
+            echo "--- Snippet BEFORE replacement ---"
+            grep -C 2 "$OLD_TEXT" "$FILE_PATH" || echo "Note: '$OLD_TEXT' not found in this file."
+
+            # Perform the replacement
+            sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$FILE_PATH"
+            
+            echo "--- Snippet AFTER replacement ---"
+            grep -C 2 "$NEW_TEXT" "$FILE_PATH"
+          else
+            echo "Warning: File not found: $FILE_PATH"
+          fi
+        done
 
     # 6.5. Modify for Yandex Verification Tag for Netlify
     - name: Update Yandex Verification Tag for Netlify
