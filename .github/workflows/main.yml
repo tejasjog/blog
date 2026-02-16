@@ -1,4 +1,4 @@
-name: Main Deploy to Cloudflare Pages from GitLab - Hugo blog 
+name: Main Deploy to GitHub Pages from GitLab - Hugo blog 
 
 on:
   workflow_dispatch:
@@ -257,14 +257,14 @@ jobs:
         echo "Calculating the size of the public folder..."
         du -sh blog/public
 
-    - name: Deploy to Cloudflare Pages
-      uses: cloudflare/pages-action@v1
+    - name: Upload Artifact
+      uses: actions/upload-pages-artifact@v3
       with:
-        apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        projectName: 'tejasjog-blog'
-        directory: 'blog/public'
-        branch: 'master'
+        path: 'blog/public'
+
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
 
     # 10. Extract URLs and Submit to IndexNow (Moved here after deployment)
     - name: Extract URLs and Submit to IndexNow
