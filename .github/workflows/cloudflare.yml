@@ -201,55 +201,95 @@ jobs:
         echo "Hugo build complete. Disk usage after build:"
         du -sh public
         df -h
-
-    # --- Deployment steps follow (using the cleanup structure from the previous fix) ---
-             
-    # 8. Cleanup .droplist Files (Run before deployment)
+        
+    # 8. Cleanup .droplist Files and Report Size
     - name: Cleanup .droplist Files and Report Size
       working-directory: blog
       run: |
-        echo "Searching for .droplist files..."
-        # Find all .droplist files
-        DROPLIST_FILES=$(find . -name "*.droplist")
-        
-        if [ -z "$DROPLIST_FILES" ]; then
-          echo "No .droplist files found. Exiting cleanup."
-        else
-          for DROPLIST_FILE in $DROPLIST_FILES; do
-            echo "Processing $DROPLIST_FILE..."
-            DROPLIST_DIR=$(dirname "$DROPLIST_FILE")
-            
-            # Read and delete files listed in the .droplist
-            while IFS= read -r FILE_TO_DELETE || [ -n "$FILE_TO_DELETE" ]; do
-              if [ -z "$FILE_TO_DELETE" ]; then continue; fi
-
-              filename="${FILE_TO_DELETE%.*}"
-              extension="${FILE_TO_DELETE##*.}"
-              
-              if [ "$filename" != "$FILE_TO_DELETE" ]; then
-                UPPERCASE_EXTENSION="${extension^^}"
-                LOWERCASE_EXTENSION=$(echo "$extension" | tr '[:upper:]' '[:lower:]')
-                
-                for path in "$DROPLIST_DIR/${filename}.${LOWERCASE_EXTENSION}" "$DROPLIST_DIR/${filename}.${UPPERCASE_EXTENSION}"; do
-                  if [ -f "$path" ]; then
-                    echo "Deleting file: $path"
-                    rm "$path"
-                  fi
-                done
-              else
-                FULL_PATH="$DROPLIST_DIR/$FILE_TO_DELETE"
-                if [ -f "$FULL_PATH" ]; then
-                  echo "Deleting file: $FULL_PATH"
-                  rm "$FULL_PATH"
-                fi
-              fi
-            done < "$DROPLIST_FILE"
-
-            # Delete the .droplist file itself after processing its contents
-            echo "Finished processing. Deleting control file: $DROPLIST_FILE"
-            rm "$DROPLIST_FILE"
-          done
-        fi
+          echo "Searching for .droplist files..."
+          DROPLIST_FILES=$(find . -name "*.droplist")
+          
+          # Initialize counters
+          TOTAL_REQUESTED_DELETIONS=0
+          TOTAL_ACTUAL_DELETIONS=0
+          declare -a GAPS=()
+  
+          if [ -z "$DROPLIST_FILES" ]; then
+              echo "No .droplist files found. Exiting cleanup."
+          else
+              for DROPLIST_FILE in $DROPLIST_FILES; do
+                  echo "--------------------------------------------------------"
+                  echo "Processing control file: $DROPLIST_FILE"
+                  DROPLIST_DIR=$(dirname "$DROPLIST_FILE")
+                  
+                  # Read each entry in the droplist
+                  while IFS= read -r ENTRY || [ -n "$ENTRY" ]; do
+                      if [ -z "$ENTRY" ]; then continue; fi
+                      
+                      ((TOTAL_REQUESTED_DELETIONS++))
+                      FILE_FOUND_AND_DELETED=false
+                      
+                      # Split into name and extension
+                      filename_part="${ENTRY%.*}"
+                      ext_part="${ENTRY##*.}"
+                      
+                      # Create variations for case-insensitive checking
+                      # If the entry has no extension, ext_part will equal filename_part
+                      if [ "$filename_part" == "$ENTRY" ]; then
+                          # Handle files without extensions
+                          VARIATIONS=("$filename_part" "${filename_part^^}" "${filename_part@@}")
+                      else
+                          # Generate combinations: (lower.lower, lower.UPPER, UPPER.lower, UPPER.UPPER)
+                          VARIATIONS=(
+                              "${filename_part}.${ext_part,,}"
+                              "${filename_part}.${ext_part^^}"
+                              "${filename_part^^}.${ext_part,,}"
+                              "${filename_part^^}.${ext_part^^}"
+                          )
+                      fi
+  
+                      # Check each variation in the local directory
+                      for var in "${VARIATIONS[@]}"; do
+                          FULL_PATH="$DROPLIST_DIR/$var"
+                          if [ -f "$FULL_PATH" ]; then
+                              echo "[FOUND] Deleting: $FULL_PATH"
+                              rm "$FULL_PATH"
+                              ((TOTAL_ACTUAL_DELETIONS++))
+                              FILE_FOUND_AND_DELETED=true
+                              break # Stop checking variations once one is deleted
+                          fi
+                      done
+  
+                      if [ "$FILE_FOUND_AND_DELETED" = false ]; then
+                          echo "[NOT FOUND] No match for: $ENTRY in $DROPLIST_DIR"
+                          GAPS+=("$DROPLIST_DIR/$ENTRY")
+                      fi
+  
+                  done < "$DROPLIST_FILE"
+  
+                  echo "Finished processing. Deleting control file: $DROPLIST_FILE"
+                  rm "$DROPLIST_FILE"
+              done
+          fi
+  
+          echo "========================================================"
+          echo "CLEANUP SUMMARY"
+          echo "========================================================"
+          echo "Total images requested for deletion: $TOTAL_REQUESTED_DELETIONS"
+          echo "Total images actually deleted:      $TOTAL_ACTUAL_DELETIONS"
+          
+          DIFF=$((TOTAL_REQUESTED_DELETIONS - TOTAL_ACTUAL_DELETIONS))
+          
+          if [ $DIFF -eq 0 ]; then
+              echo "Success: All requested images were found and removed."
+          else
+              echo "GAP DETECTED: $DIFF files were listed but not found on disk."
+              echo "Missing Files List:"
+              for gap in "${GAPS[@]}"; do
+                  echo "  - $gap"
+              done
+          fi
+          echo "========================================================"
 
     # 9. Cloudflare Deployment Phase & Deploy
     - name: Echo public folder size
