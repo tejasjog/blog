@@ -1,0 +1,308 @@
+name: Deploy to Cloudflare Pages from GitLab - Hugo blog 
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    # IMPORTANT: Consider using 'ubuntu-20.04' instead of 'ubuntu-latest'
+    # if 'ubuntu-latest' (currently 24.04) has less disk space on your self-hosted runner.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write # Required for deploy-pages action
+
+    env:
+      DART_SASS_VERSION: 1.97.3
+      HUGO_VERSION: 0.155.3
+      NODE_VERSION: 20
+
+    steps:
+    - name: Free Disk Space (Ubuntu)
+      uses: jlumbroso/free-disk-space@main
+      with:
+        # This removes large pre-installed tools to free up ~30GB+
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
+        docker-images: true
+        swap-storage: true
+    # 0. CRITICAL: EARLY SYSTEM CLEANUP
+    # This step is designed to aggressively free up space before any installation or cloning.
+    - name: Aggressive Runner System Cleanup
+      run: |
+        echo "Starting aggressive system cleanup..."
+        # 1. Clean apt package cache
+        sudo apt-get autoremove -y
+        sudo apt-get clean
+
+        # 2. Remove common large tools/caches not needed for this workflow (e.g., Azure, Docker images)
+        # Check if these directories exist before trying to remove them.
+        echo "Removing large tool caches and unnecessary packages..."
+
+        # Docker images can be huge; removing them is often the biggest win
+        if command -v docker &> /dev/null; then
+          sudo docker system prune --all --force
+        fi
+
+        # Remove large .NET and Android SDK packages
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+
+        # Print disk usage after initial cleanup
+        echo "Disk usage after aggressive cleanup:"
+        df -h
+
+    # 1. Checkout Code from GitLab
+    - name: Checkout Code with Submodule Authentication
+      env:
+        GIT_OAUTH_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
+      run: |
+        git config --global url."https://oauth2:$GIT_OAUTH_TOKEN@gitlab.com".insteadOf "https://gitlab.com"
+        git clone --depth 1 https://gitlab.com/tejasjog/blog.git
+        cd blog
+
+    # 2. Run Submodule Update and Cleanup .git files
+    - name: Update Submodules and Cleanup Content Directories
+      working-directory: blog
+      run: |
+        echo "Attempting to update submodules..."
+        git submodule update --init --force --recursive --remote --verbose --depth 1
+
+        echo "Total files in repository (excluding .git):"
+        find . -path ./.git -prune -o -type f -print | wc -l
+
+    # 3. Optimized Node.js Setup
+    - name: Set up Node.js Environment
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    # 4. Install Brotli, Dart Sass, and Hugo (Manual install with immediate cleanup)
+    - name: Install Dependencies with Cleanup
+      run: |
+        echo "Installing system dependencies: brotli, Dart Sass, and Hugo..."
+        sudo apt-get update
+        sudo apt-get install -y brotli
+
+        # Install Dart Sass
+        DART_SASS_FILENAME="dart-sass-${{ env.DART_SASS_VERSION }}-linux-x64.tar.gz"
+        curl -LJO https://github.com/sass/dart-sass/releases/download/${{ env.DART_SASS_VERSION }}/$DART_SASS_FILENAME
+        tar -xf $DART_SASS_FILENAME
+        sudo cp -r dart-sass/* /usr/local/bin/
+        rm -rf dart-sass* # CRITICAL CLEANUP 1
+
+        # Install Hugo
+        HUGO_DEB_FILENAME="hugo_extended_${{ env.HUGO_VERSION }}_linux-amd64.deb"
+        sudo curl -LJO https://github.com/gohugoio/hugo/releases/download/v${{ env.HUGO_VERSION }}/$HUGO_DEB_FILENAME
+        sudo apt-get install -y ./$HUGO_DEB_FILENAME
+        sudo rm $HUGO_DEB_FILENAME # CRITICAL CLEANUP 2
+
+        # FINAL PACKAGE CLEANUP
+        sudo apt-get autoremove -y
+        sudo apt-get clean
+        echo "Dependencies installed. Disk usage check before npm install:"
+        df -h
+
+    # 5. Install Node Dependencies and Global CLIs
+    - name: Install Node Dependencies and Global CLIs
+      working-directory: blog
+      run: |
+        npm install
+        # Install CLIs here. Since Node is set up, this should work.
+        npm install -g wrangler
+
+    # 6. Modify for Cloudflare Widths
+    - name: Modify responsiveImage Shortcode for Cloudflare Widths
+      working-directory: blog
+      run: |
+        SHORTCODE_PATH=$(find . -path "*/shortcodes/responsiveImage.html" -type f | head -n 1)
+        OLD_TEXT='slice 1600'
+        NEW_TEXT='${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}'
+
+        echo "vars.CLOUDFLARE_IMAGE_WIDTHS: " ${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}
+        
+        if [ -n "$SHORTCODE_PATH" ]; then
+          echo "Found shortcode at: $SHORTCODE_PATH"
+
+          echo "--- Content BEFORE replacement (Cloudflare) ---"
+          cat "$SHORTCODE_PATH"
+
+          # Perform replacement
+          sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$SHORTCODE_PATH"
+          
+          echo "--- Content AFTER replacement (Cloudflare) ---"
+          cat "$SHORTCODE_PATH"
+        else
+          echo "Warning: responsiveImage.html not found."
+        fi
+        
+    - name: Batch Update Image Widths to Cloudflare Settings
+      working-directory: blog
+      run: |
+        # Define the target variable from GitHub Vars
+        NEW_TEXT='${{ vars.CLOUDFLARE_IMAGE_WIDTHS_IMG }}'
+        OLD_TEXT='1600'
+        
+        echo "Target Cloudflare Widths: $NEW_TEXT"
+
+        # Define the list of files to process
+        # 1. render-image markup
+        # 2. img shortcode
+        # 3. cover_image partial
+        FILES_TO_EDIT=(
+          "$(find . -path "*/_default/_markup/render-image.html" -type f -not -path "./themes/*" | head -n 1)"
+          "$(find . -path "*/layouts/shortcodes/img.html" -type f | head -n 1)"
+          "$(find . -path "*/layouts/partials/cover_image.html" -type f | head -n 1)"
+        )
+
+        for FILE_PATH in "${FILES_TO_EDIT[@]}"; do
+          if [ -f "$FILE_PATH" ]; then
+            echo "========================================================"
+            echo "Processing: $FILE_PATH"
+            
+            echo "--- Snippet BEFORE replacement ---"
+            grep -C 2 "$OLD_TEXT" "$FILE_PATH" || echo "Note: '$OLD_TEXT' not found in this file."
+
+            # Perform the replacement
+            sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$FILE_PATH"
+            
+            echo "--- Snippet AFTER replacement ---"
+            grep -C 2 "$NEW_TEXT" "$FILE_PATH"
+          else
+            echo "Warning: File not found: $FILE_PATH"
+          fi
+        done
+
+    # 6. Modify for Yandex Verification Tag for Cloudflare
+    - name: Update Yandex Verification Tag for Cloudflare
+      working-directory: blog
+      run: |
+        echo "--- Verification tag BEFORE replacement ---"
+        grep "SiteVerificationTag: yandex-SiteVerificationTag" hugo.yaml || echo "Tag not found!"
+
+        echo "Updating Yandex SiteVerificationTag for Cloudflare..."
+        sed -i "s/SiteVerificationTag: yandex-SiteVerificationTag/SiteVerificationTag: ${{ vars.CLOUDFLARE_YANDEX_SITEVERIFICATIONTAG }}/g" hugo.yaml
+        
+        echo "--- Verification tag AFTER replacement ---"
+        grep "SiteVerificationTag" hugo.yaml
+        
+    # 7. Build Hugo Site (First Build - Where it was failing)
+    - name: Build Hugo Site (for Cloudflare)
+      working-directory: blog
+      run: |
+        echo "Running Hugo build. Final disk check before build:"
+        df -h
+        hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog-blog.pages.dev/' }} --destination public --environment production
+        echo "Hugo build complete. Disk usage after build:"
+        du -sh public
+        df -h
+
+    # --- Deployment steps follow (using the cleanup structure from the previous fix) ---
+             
+    # 8. Cleanup .droplist Files (Run before deployment)
+    - name: Cleanup .droplist Files and Report Size
+      working-directory: blog
+      run: |
+        echo "Searching for .droplist files..."
+        # Find all .droplist files
+        DROPLIST_FILES=$(find . -name "*.droplist")
+        
+        if [ -z "$DROPLIST_FILES" ]; then
+          echo "No .droplist files found. Exiting cleanup."
+        else
+          for DROPLIST_FILE in $DROPLIST_FILES; do
+            echo "Processing $DROPLIST_FILE..."
+            DROPLIST_DIR=$(dirname "$DROPLIST_FILE")
+            
+            # Read and delete files listed in the .droplist
+            while IFS= read -r FILE_TO_DELETE || [ -n "$FILE_TO_DELETE" ]; do
+              if [ -z "$FILE_TO_DELETE" ]; then continue; fi
+
+              filename="${FILE_TO_DELETE%.*}"
+              extension="${FILE_TO_DELETE##*.}"
+              
+              if [ "$filename" != "$FILE_TO_DELETE" ]; then
+                UPPERCASE_EXTENSION="${extension^^}"
+                LOWERCASE_EXTENSION=$(echo "$extension" | tr '[:upper:]' '[:lower:]')
+                
+                for path in "$DROPLIST_DIR/${filename}.${LOWERCASE_EXTENSION}" "$DROPLIST_DIR/${filename}.${UPPERCASE_EXTENSION}"; do
+                  if [ -f "$path" ]; then
+                    echo "Deleting file: $path"
+                    rm "$path"
+                  fi
+                done
+              else
+                FULL_PATH="$DROPLIST_DIR/$FILE_TO_DELETE"
+                if [ -f "$FULL_PATH" ]; then
+                  echo "Deleting file: $FULL_PATH"
+                  rm "$FULL_PATH"
+                fi
+              fi
+            done < "$DROPLIST_FILE"
+
+            # Delete the .droplist file itself after processing its contents
+            echo "Finished processing. Deleting control file: $DROPLIST_FILE"
+            rm "$DROPLIST_FILE"
+          done
+        fi
+
+    # 9. Cloudflare Deployment Phase & Deploy
+    - name: Echo public folder size
+      run: |
+        echo "Calculating the size of the public folder..."
+        du -sh blog/public
+
+    - name: Deploy to Cloudflare Pages
+      uses: cloudflare/pages-action@v1
+      with:
+        apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        projectName: 'tejasjog-blog'
+        directory: 'blog/public'
+        branch: 'master'
+
+    # 10. Extract URLs and Submit to IndexNow (Moved here after deployment)
+    - name: Extract URLs and Submit to IndexNow
+      working-directory: blog
+      run: |
+        echo "Waiting for Cloudflare deployment to propagate..."
+        # Wait 30 seconds to ensure the new deployment is live across edge nodes
+        sleep 30 
+        
+        # Verify the key file is actually reachable before pinging IndexNow
+        KEY_URL="https://tejasjog-blog.pages.dev/90713259142C4858C5DB91DF25E69DBF.txt"
+        STATUS=$(curl -o /dev/null -s -w "%{http_code}" "$KEY_URL")
+        
+        if [ "$STATUS" -ne 200 ]; then
+          echo "Error: Key file is not live yet (Status: $STATUS). Aborting IndexNow ping."
+          exit 0 # Exit gracefully so the workflow doesn't fail
+        fi
+
+        echo "Key is live. Extracting URLs from sitemap.xml..."
+        URLS=$(grep -Po '(?<=<loc>)([^<]+)' public/sitemap.xml | sed 's/^/"/;s/$/"/' | paste -sd "," -)
+        
+        echo "Submitting batch request to IndexNow..."
+        JSON_PAYLOAD='{
+          "host": "tejasjog-blog.pages.dev",
+          "key": "90713259142C4858C5DB91DF25E69DBF",
+          "keyLocation": "https://tejasjog-blog.pages.dev/90713259142C4858C5DB91DF25E69DBF.txt",
+          "urlList": ['"$URLS"']
+        }'
+        
+        curl -X POST "https://api.indexnow.org/IndexNow" \
+             -H "Content-Type: application/json; charset=utf-8" \
+             -d "$JSON_PAYLOAD" -v
+             
+    # 11. CRITICAL SPACE CLEANUP
+    - name: Cleanup Cloudflare Build Assets
+      working-directory: blog
+      run: |
+        echo "Cleaning up public directory to free space..."
+        rm -rf public
+        echo "Cleanup complete. Disk usage after cleanup:"
+        df -h
