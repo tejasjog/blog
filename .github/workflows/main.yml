@@ -202,63 +202,61 @@ jobs:
         du -sh public
         df -h
 
-    # --- Deployment steps follow (using the cleanup structure from the previous fix) ---
-             
-    # 8. Cleanup .droplist Files with Detailed Logging
+    # 8. Cleanup .droplist Files (Source & Public)
     - name: Cleanup .droplist Files and Report Deletions
       working-directory: blog
       run: |
         echo "========================================================"
         echo "SEARCHING FOR .DROPLIST FILES"
         echo "========================================================"
-        DROPLIST_FILES=$(find . -name "*.droplist")
+        # Find droplists in the content directory
+        DROPLIST_FILES=$(find content -name "*.droplist")
         
         if [ -z "$DROPLIST_FILES" ]; then
-          echo "No .droplist files found. Skipping cleanup."
+          echo "No .droplist files found."
         else
           for DROPLIST_FILE in $DROPLIST_FILES; do
             echo "--------------------------------------------------------"
-            echo "Processing droplist: $DROPLIST_FILE"
-            echo "--------------------------------------------------------"
-            DROPLIST_DIR=$(dirname "$DROPLIST_FILE")
+            echo "Processing: $DROPLIST_FILE"
             
-            # Read and process each entry in the .droplist
+            # Get the directory relative to 'content'
+            # Example: content/posts/2022/09/27/images -> posts/2022/09/27/images
+            REL_DIR=$(dirname "$DROPLIST_FILE" | sed 's|^content/||')
+            
             while IFS= read -r FILE_TO_DELETE || [ -n "$FILE_TO_DELETE" ]; do
               if [ -z "$FILE_TO_DELETE" ]; then continue; fi
-
-              # Handle both case-sensitive and case-insensitive extensions
-              filename="${FILE_TO_DELETE%.*}"
-              extension="${FILE_TO_DELETE##*.}"
               
-              if [ "$filename" != "$FILE_TO_DELETE" ]; then
-                UPPERCASE_EXTENSION="${extension^^}"
-                LOWERCASE_EXTENSION=$(echo "$extension" | tr '[:upper:]' '[:lower:]')
-                
-                FOUND_ANY=false
-                for path in "$DROPLIST_DIR/${filename}.${LOWERCASE_EXTENSION}" "$DROPLIST_DIR/${filename}.${UPPERCASE_EXTENSION}"; do
-                  if [ -f "$path" ]; then
-                    rm "$path"
-                    echo "[DELETED] $path"
-                    FOUND_ANY=true
-                  fi
-                done
-                
-                if [ "$FOUND_ANY" = false ]; then
-                  echo "[NOT FOUND] $DROPLIST_DIR/${filename}.${LOWERCASE_EXTENSION} (checked both cases)"
+              filename="${FILE_TO_DELETE%.*}"
+              ext="${FILE_TO_DELETE##*.}"
+              lower_ext=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
+              upper_ext=$(echo "$ext" | tr '[:lower:]' '[:upper:]')
+
+              # We need to check THREE locations:
+              # 1. The source content folder (relative to the droplist)
+              # 2. The public output folder (where Hugo puts them)
+              # 3. The public output folder (with the REL_DIR prefix)
+              
+              POSSIBLE_PATHS=(
+                "content/$REL_DIR/${filename}.${lower_ext}"
+                "content/$REL_DIR/${filename}.${upper_ext}"
+                "public/$REL_DIR/${filename}.${lower_ext}"
+                "public/$REL_DIR/${filename}.${upper_ext}"
+              )
+
+              DELETED_IN_STEP=false
+              for path in "${POSSIBLE_PATHS[@]}"; do
+                if [ -f "$path" ]; then
+                  rm "$path"
+                  echo "[DELETED] $path"
+                  DELETED_IN_STEP=true
                 fi
-              else
-                # Direct file path deletion for entries without extensions
-                FULL_PATH="$DROPLIST_DIR/$FILE_TO_DELETE"
-                if [ -f "$FULL_PATH" ]; then
-                  rm "$FULL_PATH"
-                  echo "[DELETED] $FULL_PATH"
-                else
-                  echo "[NOT FOUND] $FULL_PATH"
-                fi
+              done
+
+              if [ "$DELETED_IN_STEP" = false ]; then
+                echo "[NOT FOUND] ${filename}.[${lower_ext}|${upper_ext}] in content or public"
               fi
             done < "$DROPLIST_FILE"
-
-            echo "Finished processing. Removing control file: $DROPLIST_FILE"
+            
             rm "$DROPLIST_FILE"
           done
         fi
