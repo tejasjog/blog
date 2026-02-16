@@ -304,7 +304,39 @@ jobs:
         echo "Scripts & Styles (JS/CSS):"
         find public -regex '.*\.\(js\|css\)' -exec du -ch {} + | grep total || echo "None found"
 
-    # 9. GitHub Pages Deployment Phase & Deploy
+    # 9. Final Deployment Size Report
+    - name: Final Public Folder Size Summary
+      working-directory: blog
+      run: |
+        echo "========================================================"
+        echo "FINAL DEPLOYMENT SIZE REPORT"
+        echo "========================================================"
+        
+        # 1. Total size of the public folder
+        TOTAL_SIZE=$(du -sh public | cut -f1)
+        echo "TOTAL DEPLOYABLE SIZE: $TOTAL_SIZE"
+        
+        echo ""
+        echo "--- TOP 10 LARGEST DIRECTORIES ---"
+        # Shows exactly which sections of your site are taking the most space
+        du -h --max-depth=3 public | sort -hr | head -n 10
+        
+        echo ""
+        echo "--- TOP 20 LARGEST INDIVIDUAL FILES ---"
+        # Lists the specific files (likely high-res images) contributing to bloat
+        find public -type f -exec du -h {} + | sort -hr | head -n 20
+        
+        echo ""
+        # Alert if the size is approaching the 1GB limit
+        SIZE_BYTES=$(du -sb public | cut -f1)
+        LIMIT_BYTES=1073741824 # 1 GB in bytes
+        if [ "$SIZE_BYTES" -gt "$LIMIT_BYTES" ]; then
+          echo "!!! WARNING: Deployment size exceeds 1 GB limit !!!"
+        elif [ "$SIZE_BYTES" -gt 858993459 ]; then
+          echo "!!! CAUTION: Deployment size is over 800 MB (Approaching limit) !!!"
+        fi
+
+    # 9. 5. GitHub Pages Deployment Phase & Deploy
     - name: Upload Artifact
       uses: actions/upload-pages-artifact@v3
       with:
