@@ -204,25 +204,29 @@ jobs:
 
     # --- Deployment steps follow (using the cleanup structure from the previous fix) ---
              
-    # 8. Cleanup .droplist Files (Run before deployment)
-    - name: Cleanup .droplist Files and Report Size
+    # 8. Cleanup .droplist Files with Detailed Logging
+    - name: Cleanup .droplist Files and Report Deletions
       working-directory: blog
       run: |
-        echo "Searching for .droplist files..."
-        # Find all .droplist files
+        echo "========================================================"
+        echo "SEARCHING FOR .DROPLIST FILES"
+        echo "========================================================"
         DROPLIST_FILES=$(find . -name "*.droplist")
         
         if [ -z "$DROPLIST_FILES" ]; then
-          echo "No .droplist files found. Exiting cleanup."
+          echo "No .droplist files found. Skipping cleanup."
         else
           for DROPLIST_FILE in $DROPLIST_FILES; do
-            echo "Processing $DROPLIST_FILE..."
+            echo "--------------------------------------------------------"
+            echo "Processing droplist: $DROPLIST_FILE"
+            echo "--------------------------------------------------------"
             DROPLIST_DIR=$(dirname "$DROPLIST_FILE")
             
-            # Read and delete files listed in the .droplist
+            # Read and process each entry in the .droplist
             while IFS= read -r FILE_TO_DELETE || [ -n "$FILE_TO_DELETE" ]; do
               if [ -z "$FILE_TO_DELETE" ]; then continue; fi
 
+              # Handle both case-sensitive and case-insensitive extensions
               filename="${FILE_TO_DELETE%.*}"
               extension="${FILE_TO_DELETE##*.}"
               
@@ -230,23 +234,31 @@ jobs:
                 UPPERCASE_EXTENSION="${extension^^}"
                 LOWERCASE_EXTENSION=$(echo "$extension" | tr '[:upper:]' '[:lower:]')
                 
+                FOUND_ANY=false
                 for path in "$DROPLIST_DIR/${filename}.${LOWERCASE_EXTENSION}" "$DROPLIST_DIR/${filename}.${UPPERCASE_EXTENSION}"; do
                   if [ -f "$path" ]; then
-                    echo "Deleting file: $path"
                     rm "$path"
+                    echo "[DELETED] $path"
+                    FOUND_ANY=true
                   fi
                 done
+                
+                if [ "$FOUND_ANY" = false ]; then
+                  echo "[NOT FOUND] $DROPLIST_DIR/${filename}.${LOWERCASE_EXTENSION} (checked both cases)"
+                fi
               else
+                # Direct file path deletion for entries without extensions
                 FULL_PATH="$DROPLIST_DIR/$FILE_TO_DELETE"
                 if [ -f "$FULL_PATH" ]; then
-                  echo "Deleting file: $FULL_PATH"
                   rm "$FULL_PATH"
+                  echo "[DELETED] $FULL_PATH"
+                else
+                  echo "[NOT FOUND] $FULL_PATH"
                 fi
               fi
             done < "$DROPLIST_FILE"
 
-            # Delete the .droplist file itself after processing its contents
-            echo "Finished processing. Deleting control file: $DROPLIST_FILE"
+            echo "Finished processing. Removing control file: $DROPLIST_FILE"
             rm "$DROPLIST_FILE"
           done
         fi
