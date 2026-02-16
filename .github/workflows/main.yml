@@ -279,10 +279,10 @@ jobs:
         
         echo ""
         echo "========================================================"
-        echo "2. HIERARCHICAL FOLDER BREAKDOWN (2 levels deep)"
+        echo "2. HIERARCHICAL FOLDER BREAKDOWN (4 levels deep)"
         echo "========================================================"
         # This shows the size of subfolders like public/posts, public/images, etc.
-        du -h --max-depth=3 public | sort -hr
+        du -h --max-depth=4 public | sort -hr
         
         echo ""
         echo "========================================================"
