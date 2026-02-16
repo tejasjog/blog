@@ -201,44 +201,47 @@ jobs:
         echo "Hugo build complete. Disk usage after build:"
         du -sh public
         df -h
-
-    # 8. Cleanup .droplist Files (Source & Public) - Total Case Coverage
+  
+    # 8. Cleanup .droplist Files (Source & Public) - Recursive Path Fix
     - name: Cleanup .droplist Files and Report Deletions
       working-directory: blog
       run: |
         echo "========================================================"
         echo "SEARCHING FOR .DROPLIST FILES"
         echo "========================================================"
-        # Search the entire blog directory for droplists
         DROPLIST_FILES=$(find . -name "*.droplist")
         
         if [ -z "$DROPLIST_FILES" ]; then
-          echo "No .droplist files found. Check if they are in the content/ folder."
+          echo "No .droplist files found."
         else
           for DROPLIST_FILE in $DROPLIST_FILES; do
             echo "--------------------------------------------------------"
             echo "Processing droplist: $DROPLIST_FILE"
             
-            # Map source directory to public directory
-            # Strips leading './content/' or 'content/' to get the relative path
-            REL_DIR=$(dirname "$DROPLIST_FILE" | sed 's|^\./||' | sed 's|^content/||')
+            # 1. Get the directory containing the droplist
+            # Example: ./content/posts/2025/09/19
+            # Example: ./public/posts/2025/09/19
+            BASE_DIR=$(dirname "$DROPLIST_FILE")
             
-            while IFS= read -r FILE_TO_DELETE || [ -n "$FILE_TO_DELETE" ]; do
-              if [ -z "$FILE_TO_DELETE" ]; then continue; fi
+            while IFS= read -r ENTRY || [ -n "$ENTRY" ]; do
+              if [ -z "$ENTRY" ]; then continue; fi
               
-              # Extract base name and extension
-              base="${FILE_TO_DELETE%.*}"
-              ext="${FILE_TO_DELETE##*.}"
-              
-              # Calculate all case variations
+              # 2. Handle entries that might have subfolders (e.g., images/photo.jpg)
+              # Split into folder and filename
+              FILE_NAME=$(basename "$ENTRY")
+              SUB_DIR=$(dirname "$ENTRY")
+              if [ "$SUB_DIR" = "." ]; then SUB_DIR=""; else SUB_DIR="/$SUB_DIR"; fi
+
+              # 3. Calculate Case Variations for the filename
+              base="${FILE_NAME%.*}"
+              ext="${FILE_NAME##*.}"
               base_l=$(echo "$base" | tr '[:upper:]' '[:lower:]')
               base_u=$(echo "$base" | tr '[:lower:]' '[:upper:]')
               ext_l=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
               ext_u=$(echo "$ext" | tr '[:lower:]' '[:upper:]')
 
-              # Generate all combinations
               VAR_NAMES=(
-                "$FILE_TO_DELETE"
+                "$FILE_NAME"
                 "${base_l}.${ext_l}"
                 "${base_u}.${ext_u}"
                 "${base_u}.${ext_l}"
@@ -246,24 +249,23 @@ jobs:
               )
 
               DELETED_ANY=false
-              # Unique the names and check both 'content' and 'public'
               for name in $(printf "%s\n" "${VAR_NAMES[@]}" | sort -u); do
-                for prefix in "content" "public"; do
-                  path="$prefix/$REL_DIR/$name"
-                  if [ -f "$path" ]; then
-                    rm "$path"
-                    echo "[DELETED] $path"
-                    DELETED_ANY=true
-                  fi
-                done
+                # Construct the path using the directory where the droplist was found
+                # This works regardless of whether the droplist is in 'content' or 'public'
+                TARGET_PATH="${BASE_DIR}${SUB_DIR}/${name}"
+                
+                if [ -f "$TARGET_PATH" ]; then
+                  rm "$TARGET_PATH"
+                  echo "[DELETED] $TARGET_PATH"
+                  DELETED_ANY=true
+                fi
               done
 
               if [ "$DELETED_ANY" = false ]; then
-                echo "[NOT FOUND] $FILE_TO_DELETE (checked all case variants in content & public)"
+                echo "[NOT FOUND] $ENTRY (checked all variants in ${BASE_DIR}${SUB_DIR})"
               fi
             done < "$DROPLIST_FILE"
             
-            echo "Removing control file: $DROPLIST_FILE"
             rm "$DROPLIST_FILE"
           done
         fi
