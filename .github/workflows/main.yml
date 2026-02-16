@@ -202,14 +202,13 @@ jobs:
         du -sh public
         df -h
 
-    # 8. Cleanup .droplist Files (Source & Public)
+    # 8. Cleanup .droplist Files (Source & Public) - Total Case Coverage
     - name: Cleanup .droplist Files and Report Deletions
       working-directory: blog
       run: |
         echo "========================================================"
-        echo "SEARCHING FOR .DROPLIST FILES"
+        echo "SEARCHING FOR .DROPLIST FILES IN CONTENT/"
         echo "========================================================"
-        # Find droplists in the content directory
         DROPLIST_FILES=$(find content -name "*.droplist")
         
         if [ -z "$DROPLIST_FILES" ]; then
@@ -217,46 +216,53 @@ jobs:
         else
           for DROPLIST_FILE in $DROPLIST_FILES; do
             echo "--------------------------------------------------------"
-            echo "Processing: $DROPLIST_FILE"
+            echo "Processing droplist: $DROPLIST_FILE"
             
-            # Get the directory relative to 'content'
-            # Example: content/posts/2022/09/27/images -> posts/2022/09/27/images
+            # Map source content path to the generated public path
             REL_DIR=$(dirname "$DROPLIST_FILE" | sed 's|^content/||')
             
             while IFS= read -r FILE_TO_DELETE || [ -n "$FILE_TO_DELETE" ]; do
               if [ -z "$FILE_TO_DELETE" ]; then continue; fi
               
-              filename="${FILE_TO_DELETE%.*}"
+              # Split filename and extension
+              base="${FILE_TO_DELETE%.*}"
               ext="${FILE_TO_DELETE##*.}"
-              lower_ext=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
-              upper_ext=$(echo "$ext" | tr '[:lower:]' '[:upper:]')
-
-              # We need to check THREE locations:
-              # 1. The source content folder (relative to the droplist)
-              # 2. The public output folder (where Hugo puts them)
-              # 3. The public output folder (with the REL_DIR prefix)
               
-              POSSIBLE_PATHS=(
-                "content/$REL_DIR/${filename}.${lower_ext}"
-                "content/$REL_DIR/${filename}.${upper_ext}"
-                "public/$REL_DIR/${filename}.${lower_ext}"
-                "public/$REL_DIR/${filename}.${upper_ext}"
+              # Pre-calculate case variations
+              base_l=$(echo "$base" | tr '[:upper:]' '[:lower:]')
+              base_u=$(echo "$base" | tr '[:lower:]' '[:upper:]')
+              ext_l=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
+              ext_u=$(echo "$ext" | tr '[:lower:]' '[:upper:]')
+
+              # Array of all 4 major combinations
+              # We check both the source 'content' and the output 'public'
+              VAR_NAMES=(
+                "${base_l}.${ext_l}"
+                "${base_u}.${ext_u}"
+                "${base_u}.${ext_l}"
+                "${base_l}.${ext_u}"
+                "$FILE_TO_DELETE"
               )
 
-              DELETED_IN_STEP=false
-              for path in "${POSSIBLE_PATHS[@]}"; do
-                if [ -f "$path" ]; then
-                  rm "$path"
-                  echo "[DELETED] $path"
-                  DELETED_IN_STEP=true
-                fi
+              DELETED_ANY=false
+              for name in $(printf "%s\n" "${VAR_NAMES[@]}" | sort -u); do
+                # Check both source and deployment folders
+                for prefix in "content" "public"; do
+                  path="$prefix/$REL_DIR/$name"
+                  if [ -f "$path" ]; then
+                    rm "$path"
+                    echo "[DELETED] $path"
+                    DELETED_ANY=true
+                  fi
+                done
               done
 
-              if [ "$DELETED_IN_STEP" = false ]; then
-                echo "[NOT FOUND] ${filename}.[${lower_ext}|${upper_ext}] in content or public"
+              if [ "$DELETED_ANY" = false ]; then
+                echo "[NOT FOUND] $FILE_TO_DELETE (all case variants checked in content & public)"
               fi
             done < "$DROPLIST_FILE"
             
+            echo "Removing control file: $DROPLIST_FILE"
             rm "$DROPLIST_FILE"
           done
         fi
