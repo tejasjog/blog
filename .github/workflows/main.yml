@@ -140,54 +140,43 @@ jobs:
         else
           echo "Warning: responsiveImage.html not found."
         fi
-
-    - name: Modify img Shortcode for Cloudflare Widths
+        
+    - name: Batch Update Image Widths to Cloudflare Settings
       working-directory: blog
       run: |
-        SHORTCODE_PATH=$(find . -path "*/shortcodes/img.html" -type f | head -n 1)
-        OLD_TEXT='1600'
+        # Define the target variable from GitHub Vars
         NEW_TEXT='${{ vars.CLOUDFLARE_IMAGE_WIDTHS_IMG }}'
-
-        echo "vars.CLOUDFLARE_IMAGE_WIDTHS_IMG: " ${{ vars.CLOUDFLARE_IMAGE_WIDTHS_IMG }}
-        
-        if [ -n "$SHORTCODE_PATH" ]; then
-          echo "Found shortcode at: $SHORTCODE_PATH"
-
-          echo "--- Content BEFORE replacement (Cloudflare) ---"
-          cat "$SHORTCODE_PATH"
-
-          # Perform replacement
-          sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$SHORTCODE_PATH"
-          
-          echo "--- Content AFTER replacement (Cloudflare) ---"
-          cat "$SHORTCODE_PATH"
-        else
-          echo "Warning: img.html not found."
-        fi
-
-    - name: Modify default render-image markup for Cloudflare Widths
-      working-directory: blog
-      run: |
-        SHORTCODE_PATH=$(find . -path "*/_default/_markup/render-image.html" -type f -not -path "./themes/*" | head -n 1)
         OLD_TEXT='1600'
-        NEW_TEXT='${{ vars.CLOUDFLARE_IMAGE_WIDTHS_IMG }}'
-
-        echo "vars.CLOUDFLARE_IMAGE_WIDTHS_IMG: " ${{ vars.CLOUDFLARE_IMAGE_WIDTHS_IMG }}
         
-        if [ -n "$SHORTCODE_PATH" ]; then
-          echo "Found shortcode at: $SHORTCODE_PATH"
+        echo "Target Cloudflare Widths: $NEW_TEXT"
 
-          echo "--- Content BEFORE replacement (Cloudflare) ---"
-          cat "$SHORTCODE_PATH"
+        # Define the list of files to process
+        # 1. render-image markup
+        # 2. img shortcode
+        # 3. cover_image partial
+        FILES_TO_EDIT=(
+          "$(find . -path "*/_default/_markup/render-image.html" -type f -not -path "./themes/*" | head -n 1)"
+          "$(find . -path "*/layouts/shortcodes/img.html" -type f | head -n 1)"
+          "$(find . -path "*/layouts/partials/cover_image.html" -type f | head -n 1)"
+        )
 
-          # Perform replacement
-          sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$SHORTCODE_PATH"
-          
-          echo "--- Content AFTER replacement (Cloudflare) ---"
-          cat "$SHORTCODE_PATH"
-        else
-          echo "Warning: render-image.html not found."
-        fi
+        for FILE_PATH in "${FILES_TO_EDIT[@]}"; do
+          if [ -f "$FILE_PATH" ]; then
+            echo "========================================================"
+            echo "Processing: $FILE_PATH"
+            
+            echo "--- Snippet BEFORE replacement ---"
+            grep -C 2 "$OLD_TEXT" "$FILE_PATH" || echo "Note: '$OLD_TEXT' not found in this file."
+
+            # Perform the replacement
+            sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$FILE_PATH"
+            
+            echo "--- Snippet AFTER replacement ---"
+            grep -C 2 "$NEW_TEXT" "$FILE_PATH"
+          else
+            echo "Warning: File not found: $FILE_PATH"
+          fi
+        done
 
     # 6. Modify for Yandex Verification Tag for Cloudflare
     - name: Update Yandex Verification Tag for Cloudflare
