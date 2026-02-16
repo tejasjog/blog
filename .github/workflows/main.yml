@@ -197,7 +197,7 @@ jobs:
       run: |
         echo "Running Hugo build. Final disk check before build:"
         df -h
-        hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog-blog.pages.dev/' }} --destination public --environment production
+        hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog.github.io/blog/' }} --destination public --environment production
         echo "Hugo build complete. Disk usage after build:"
         du -sh public
         df -h
@@ -275,7 +275,7 @@ jobs:
         sleep 30 
         
         # Verify the key file is actually reachable before pinging IndexNow
-        KEY_URL="https://tejasjog-blog.pages.dev/90713259142C4858C5DB91DF25E69DBF.txt"
+        KEY_URL="https://tejasjog.github.io/blog/90713259142C4858C5DB91DF25E69DBF.txt"
         STATUS=$(curl -o /dev/null -s -w "%{http_code}" "$KEY_URL")
         
         if [ "$STATUS" -ne 200 ]; then
@@ -288,9 +288,9 @@ jobs:
         
         echo "Submitting batch request to IndexNow..."
         JSON_PAYLOAD='{
-          "host": "tejasjog-blog.pages.dev",
+          "host": "https://tejasjog.github.io/blog",
           "key": "90713259142C4858C5DB91DF25E69DBF",
-          "keyLocation": "https://tejasjog-blog.pages.dev/90713259142C4858C5DB91DF25E69DBF.txt",
+          "keyLocation": "https://tejasjog.github.io/blog/90713259142C4858C5DB91DF25E69DBF.txt",
           "urlList": ['"$URLS"']
         }'
         
