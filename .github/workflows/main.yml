@@ -251,12 +251,41 @@ jobs:
           done
         fi
 
-    # 9. GitHub Pages Deployment Phase & Deploy
-    - name: Echo public folder size
+    # 8.5. Detailed Size Analysis
+    - name: Deep Analysis of Public Folder Size
+      working-directory: blog
       run: |
-        echo "Calculating the size of the public folder..."
-        du -sh blog/public
+        echo "========================================================"
+        echo "1. TOTAL DEPLOYMENT SIZE"
+        echo "========================================================"
+        du -sh public
+        
+        echo ""
+        echo "========================================================"
+        echo "2. HIERARCHICAL FOLDER BREAKDOWN (2 levels deep)"
+        echo "========================================================"
+        # This shows the size of subfolders like public/posts, public/images, etc.
+        du -h --max-depth=3 public | sort -hr
+        
+        echo ""
+        echo "========================================================"
+        echo "3. TOP 50 LARGEST FILES IN THE DEPLOYMENT"
+        echo "========================================================"
+        # Finds all files, prints their size, and sorts by largest
+        find public -type f -exec du -h {} + | sort -hr | head -n 50
+        
+        echo ""
+        echo "========================================================"
+        echo "4. ASSET TYPE SUMMARY"
+        echo "========================================================"
+        echo "Images (WebP/JPG/PNG):"
+        find public -regex '.*\.\(webp\|jpg\|jpeg\|png\|gif\)' -exec du -ch {} + | grep total || echo "None found"
+        echo "Videos (MP4/WebM):"
+        find public -regex '.*\.\(mp4\|webm\)' -exec du -ch {} + | grep total || echo "None found"
+        echo "Scripts & Styles (JS/CSS):"
+        find public -regex '.*\.\(js\|css\)' -exec du -ch {} + | grep total || echo "None found"
 
+    # 9. GitHub Pages Deployment Phase & Deploy
     - name: Upload Artifact
       uses: actions/upload-pages-artifact@v3
       with:
