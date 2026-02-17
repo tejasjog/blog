@@ -192,45 +192,134 @@ jobs:
         du -sh public
         df -h
 
-    # 8. Cleanup .droplist Files (Run before deployment)
-    - name: Cleanup .droplist Files and Report Size
+    # 8. Cleanup .droplist Files (Source & Public) - Recursive Path Fix
+    - name: Cleanup .droplist Files and Report Deletions
       working-directory: blog
       run: |
-        echo "Searching for .droplist files..."
+        echo "========================================================"
+        echo "SEARCHING FOR .DROPLIST FILES"
+        echo "========================================================"
         DROPLIST_FILES=$(find . -name "*.droplist")
         
         if [ -z "$DROPLIST_FILES" ]; then
-          echo "No .droplist files found. Exiting cleanup."
+          echo "No .droplist files found."
         else
           for DROPLIST_FILE in $DROPLIST_FILES; do
-            echo "Processing $DROPLIST_FILE..."
-            DROPLIST_DIR=$(dirname "$DROPLIST_FILE")
+            echo "--------------------------------------------------------"
+            echo "Processing droplist: $DROPLIST_FILE"
             
-            while IFS= read -r FILE_TO_DELETE || [ -n "$FILE_TO_DELETE" ]; do
-              if [ -z "$FILE_TO_DELETE" ]; then continue; fi
-              filename="${FILE_TO_DELETE%.*}"
-              extension="${FILE_TO_DELETE##*.}"
+            # 1. Get the directory containing the droplist
+            # Example: ./content/posts/2025/09/19
+            # Example: ./public/posts/2025/09/19
+            BASE_DIR=$(dirname "$DROPLIST_FILE")
+            
+            while IFS= read -r ENTRY || [ -n "$ENTRY" ]; do
+              if [ -z "$ENTRY" ]; then continue; fi
               
-              if [ "$filename" != "$FILE_TO_DELETE" ]; then
-                UPPERCASE_EXTENSION="${extension^^}"
-                LOWERCASE_EXTENSION=$(echo "$extension" | tr '[:upper:]' '[:lower:]')
-                for path in "$DROPLIST_DIR/${filename}.${LOWERCASE_EXTENSION}" "$DROPLIST_DIR/${filename}.${UPPERCASE_EXTENSION}"; do
-                  if [ -f "$path" ]; then
-                    echo "Deleting file: $path"
-                    rm "$path"
-                  fi
-                done
-              else
-                FULL_PATH="$DROPLIST_DIR/$FILE_TO_DELETE"
-                if [ -f "$FULL_PATH" ]; then
-                  echo "Deleting file: $FULL_PATH"
-                  rm "$FULL_PATH"
+              # 2. Handle entries that might have subfolders (e.g., images/photo.jpg)
+              # Split into folder and filename
+              FILE_NAME=$(basename "$ENTRY")
+              SUB_DIR=$(dirname "$ENTRY")
+              if [ "$SUB_DIR" = "." ]; then SUB_DIR=""; else SUB_DIR="/$SUB_DIR"; fi
+
+              # 3. Calculate Case Variations for the filename
+              base="${FILE_NAME%.*}"
+              ext="${FILE_NAME##*.}"
+              base_l=$(echo "$base" | tr '[:upper:]' '[:lower:]')
+              base_u=$(echo "$base" | tr '[:lower:]' '[:upper:]')
+              ext_l=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
+              ext_u=$(echo "$ext" | tr '[:lower:]' '[:upper:]')
+
+              VAR_NAMES=(
+                "$FILE_NAME"
+                "${base_l}.${ext_l}"
+                "${base_u}.${ext_u}"
+                "${base_u}.${ext_l}"
+                "${base_l}.${ext_u}"
+              )
+
+              DELETED_ANY=false
+              for name in $(printf "%s\n" "${VAR_NAMES[@]}" | sort -u); do
+                # Construct the path using the directory where the droplist was found
+                # This works regardless of whether the droplist is in 'content' or 'public'
+                TARGET_PATH="${BASE_DIR}${SUB_DIR}/${name}"
+                
+                if [ -f "$TARGET_PATH" ]; then
+                  rm "$TARGET_PATH"
+                  echo "[DELETED] $TARGET_PATH"
+                  DELETED_ANY=true
                 fi
+              done
+
+              if [ "$DELETED_ANY" = false ]; then
+                echo "[NOT FOUND] $ENTRY (checked all variants in ${BASE_DIR}${SUB_DIR})"
               fi
             done < "$DROPLIST_FILE"
-            echo "Finished processing. Deleting control file: $DROPLIST_FILE"
+            
             rm "$DROPLIST_FILE"
           done
+        fi
+
+    # 8.6. Legacy Format Audit
+    - name: Audit for Legacy JPG/JPEG Files in Public
+      working-directory: blog
+      run: |
+        echo "========================================================"
+        echo "AUDITING PUBLIC FOLDER FOR UNPROCESSED JPG/JPEG FILES"
+        echo "========================================================"
+        echo "Note: Files containing '_hu_' are processed and will be ignored."
+        
+        # Find jpg/jpeg files and exclude those containing '_hu_'
+        LEFTOVERS=$(find public -type f -regex '.*\.\(jpg\|jpeg\|JPG\|JPEG\)' | grep -v "_hu_" || true)
+        
+        if [ -z "$LEFTOVERS" ]; then
+          echo "Success: No unprocessed legacy JPG/JPEG files found."
+        else
+          echo "!!! WARNING: Found unprocessed legacy images in the deployment !!!"
+          echo "These files lack the '_hu_' suffix and should be converted to WebP:"
+          echo "--------------------------------------------------------"
+          echo "$LEFTOVERS"
+          echo "--------------------------------------------------------"
+          
+          # Count the files
+          COUNT=$(echo "$LEFTOVERS" | grep -c .)
+          echo "Total unprocessed legacy files found: $COUNT"
+          
+          echo ""
+          echo "Tip: These are likely static assets that bypassed your Hugo pipes."
+          echo "Check your 'static/' folder or resources that aren't being processed."
+        fi
+
+    # 9. Final Deployment Size Report
+    - name: Final Public Folder Size Summary
+      working-directory: blog
+      run: |
+        echo "========================================================"
+        echo "FINAL DEPLOYMENT SIZE REPORT"
+        echo "========================================================"
+        
+        # 1. Total size of the public folder
+        TOTAL_SIZE=$(du -sh public | cut -f1)
+        echo "TOTAL DEPLOYABLE SIZE: $TOTAL_SIZE"
+        
+        echo ""
+        echo "--- TOP 10 LARGEST DIRECTORIES ---"
+        # Shows exactly which sections of your site are taking the most space
+        du -h --max-depth=3 public | sort -hr | head -n 10
+        
+        echo ""
+        echo "--- TOP 20 LARGEST INDIVIDUAL FILES ---"
+        # Lists the specific files (likely high-res images) contributing to bloat
+        find public -type f -exec du -h {} + | sort -hr | head -n 20
+        
+        echo ""
+        # Alert if the size is approaching the 1GB limit
+        SIZE_BYTES=$(du -sb public | cut -f1)
+        LIMIT_BYTES=1073741824 # 1 GB in bytes
+        if [ "$SIZE_BYTES" -gt "$LIMIT_BYTES" ]; then
+          echo "!!! WARNING: Deployment size exceeds 1 GB limit !!!"
+        elif [ "$SIZE_BYTES" -gt 858993459 ]; then
+          echo "!!! CAUTION: Deployment size is over 800 MB (Approaching limit) !!!"
         fi
 
     # 9. Netlify Deployment Phase & Deploy
