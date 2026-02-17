@@ -129,14 +129,16 @@ jobs:
         if [ -n "$SHORTCODE_PATH" ]; then
           echo "Found shortcode at: $SHORTCODE_PATH"
 
-          echo "--- Content BEFORE replacement (Cloudflare) ---"
-          cat "$SHORTCODE_PATH"
+          echo "--- Snippet BEFORE replacement (Cloudflare) ---"
+          # Only print the specific line containing the target text
+          grep "$OLD_TEXT" "$SHORTCODE_PATH" || echo "Text not found."
 
           # Perform replacement
           sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$SHORTCODE_PATH"
           
-          echo "--- Content AFTER replacement (Cloudflare) ---"
-          cat "$SHORTCODE_PATH"
+          echo "--- Snippet AFTER replacement (Cloudflare) ---"
+          # Only print the line containing the new injected variable
+          grep "${NEW_TEXT}" "$SHORTCODE_PATH"
         else
           echo "Warning: responsiveImage.html not found."
         fi
