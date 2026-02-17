@@ -114,7 +114,6 @@ jobs:
       run: |
         npm install
         # Install CLIs here. Since Node is set up, this should work.
-        npm install -g wrangler
 
     # 6. Modify for Cloudflare Widths
     - name: Modify responsiveImage Shortcode for Cloudflare Widths
@@ -348,6 +347,7 @@ jobs:
         projectName: 'tejasjog-blog'
         directory: 'blog/public'
         branch: 'master'
+        wranglerVersion: '3'
 
     # 10. Extract URLs and Submit to IndexNow (Moved here after deployment)
     - name: Extract URLs and Submit to IndexNow
