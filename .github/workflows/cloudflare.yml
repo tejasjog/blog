@@ -340,14 +340,11 @@ jobs:
         du -sh blog/public
 
     - name: Deploy to Cloudflare Pages
-      uses: cloudflare/pages-action@v1
+      uses: cloudflare/wrangler-action@v3
       with:
         apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        projectName: 'tejasjog-blog'
-        directory: 'blog/public'
-        branch: 'master'
-        wranglerVersion: '3'
+        command: pages deploy blog/public --project-name=tejasjog-blog --branch=master 
 
     # 10. Extract URLs and Submit to IndexNow (Moved here after deployment)
     - name: Extract URLs and Submit to IndexNow
