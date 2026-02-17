@@ -305,29 +305,29 @@ jobs:
       working-directory: blog
       run: |
         echo "========================================================"
-        echo "AUDITING PUBLIC FOLDER FOR LEGACY JPG/JPEG FILES"
+        echo "AUDITING PUBLIC FOLDER FOR UNPROCESSED JPG/JPEG FILES"
         echo "========================================================"
-        echo "Expected: All images should be WebP. Checking for leftovers..."
+        echo "Note: Files containing '_hu_' are processed and will be ignored."
         
-        # Find all .jpg or .jpeg files (case-insensitive)
-        LEFTOVERS=$(find public -type f -regex '.*\.\(jpg\|jpeg\|JPG\|JPEG\)')
+        # Find jpg/jpeg files and exclude those containing '_hu_'
+        LEFTOVERS=$(find public -type f -regex '.*\.\(jpg\|jpeg\|JPG\|JPEG\)' | grep -v "_hu_" || true)
         
         if [ -z "$LEFTOVERS" ]; then
-          echo "Success: No JPG/JPEG files found in the public folder."
+          echo "Success: No unprocessed legacy JPG/JPEG files found."
         else
-          echo "!!! WARNING: Found legacy image formats in the deployment !!!"
-          echo "These files should have been converted to WebP:"
+          echo "!!! WARNING: Found unprocessed legacy images in the deployment !!!"
+          echo "These files lack the '_hu_' suffix and should be converted to WebP:"
           echo "--------------------------------------------------------"
           echo "$LEFTOVERS"
           echo "--------------------------------------------------------"
           
           # Count the files
-          COUNT=$(echo "$LEFTOVERS" | wc -l)
-          echo "Total legacy files found: $COUNT"
+          COUNT=$(echo "$LEFTOVERS" | grep -c .)
+          echo "Total unprocessed legacy files found: $COUNT"
           
           echo ""
-          echo "Tip: Check if these images are being copied as 'static' assets"
-          echo "or if a Hugo template is missing the WebP processing filter."
+          echo "Tip: These are likely static assets that bypassed your Hugo pipes."
+          echo "Check your 'static/' folder or resources that aren't being processed."
         fi
 
     # 9. Final Deployment Size Report
