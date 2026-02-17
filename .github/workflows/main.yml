@@ -116,29 +116,30 @@ jobs:
         # Install CLIs here. Since Node is set up, this should work.
         npm install -g wrangler
 
-    # 6. Modify for GitHub Pages Widths
-    - name: Modify responsiveImage Shortcode for GitHub Pages Widths
+    # 6.1. Modify for GitHub Pages Widths and Format
+    - name: Modify responsiveImage Shortcode for GitHub Pages Widths and Format
       working-directory: blog
       run: |
         SHORTCODE_PATH=$(find . -path "*/shortcodes/responsiveImage.html" -type f | head -n 1)
-        OLD_TEXT='slice 1600'
-        NEW_TEXT='slice 800'
+        OLD_WIDTH='slice 1600'
+        NEW_WIDTH='slice 800'
+        OLD_FORMAT='avif'
+        NEW_FORMAT='webp'
 
-        echo "vars.PAGES_GITHUB_IMAGE_WIDTHS: " ${{ vars.PAGES_GITHUB_IMAGE_WIDTHS }}
-        
         if [ -n "$SHORTCODE_PATH" ]; then
           echo "Found shortcode at: $SHORTCODE_PATH"
 
-          echo "--- Snippet BEFORE replacement (GitHub Pages) ---"
-          # Only print the specific line containing the target text
-          grep "$OLD_TEXT" "$SHORTCODE_PATH" || echo "Text not found."
+          echo "--- Snippets BEFORE replacement (GitHub Pages) ---"
+          # Show both the width slice and the format options line
+          grep -E "$OLD_WIDTH|$OLD_FORMAT" "$SHORTCODE_PATH" || echo "Target text not found."
 
-          # Perform replacement
-          sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$SHORTCODE_PATH"
+          # Perform replacements
+          sed -i "s|${OLD_WIDTH}|${NEW_WIDTH}|g" "$SHORTCODE_PATH"
+          sed -i "s|${OLD_FORMAT}|${NEW_FORMAT}|g" "$SHORTCODE_PATH"
           
-          echo "--- Snippet AFTER replacement (GitHub Pages) ---"
-          # Only print the line containing the new injected variable
-          grep "${NEW_TEXT}" "$SHORTCODE_PATH"
+          echo "--- Snippets AFTER replacement (GitHub Pages) ---"
+          # Show the updated lines
+          grep -E "$NEW_WIDTH|$NEW_FORMAT" "$SHORTCODE_PATH"
         else
           echo "Warning: responsiveImage.html not found."
         fi
@@ -180,7 +181,7 @@ jobs:
           fi
         done
 
-    # 6. Modify for Yandex Verification Tag for GitHub Pages
+    # 6.2. Modify for Yandex Verification Tag for GitHub Pages
     - name: Update Yandex Verification Tag for GitHub Pages
       working-directory: blog
       run: |
