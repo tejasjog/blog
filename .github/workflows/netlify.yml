@@ -123,11 +123,13 @@ jobs:
         
         if [ -n "$SHORTCODE_PATH" ]; then
           echo "Found shortcode at: $SHORTCODE_PATH"
-          echo "--- Content BEFORE replacement (Netlify) ---"
-          cat "$SHORTCODE_PATH"
+          echo "--- Snippet BEFORE replacement (Netlify) ---"
+          # Only print the specific line containing the target text
+          grep "$OLD_TEXT" "$SHORTCODE_PATH" || echo "Text not found."
           sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$SHORTCODE_PATH"
-          echo "--- Content AFTER replacement (Netlify) ---"
-          cat "$SHORTCODE_PATH"
+          echo "--- Snippet AFTER replacement (Netlify) ---"
+          # Only print the line containing the new injected variable
+          grep "${NEW_TEXT}" "$SHORTCODE_PATH"
         else
           echo "Warning: responsiveImage.html not found."
         fi
