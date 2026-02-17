@@ -143,19 +143,18 @@ jobs:
           echo "Warning: responsiveImage.html not found."
         fi
         
-    - name: Batch Update Image Widths to GitHub Pages Settings
+    - name: Batch Update Image Widths and Format to GitHub Pages Settings
       working-directory: blog
       run: |
-        # Define the target variable from GitHub Vars
-        NEW_TEXT='800'
-        OLD_TEXT='1600'
+        # Define the target variables
+        NEW_WIDTH='800'
+        OLD_WIDTH='1600'
+        NEW_FORMAT='webp'
+        OLD_FORMAT='avif'
         
-        echo "Target GitHub Pages Widths: $NEW_TEXT"
+        echo "Target GitHub Pages Settings: Width=$NEW_WIDTH, Format=$NEW_FORMAT"
 
         # Define the list of files to process
-        # 1. render-image markup
-        # 2. img shortcode
-        # 3. cover_image partial
         FILES_TO_EDIT=(
           "$(find . -path "*/_default/_markup/render-image.html" -type f -not -path "./themes/*" | head -n 1)"
           "$(find . -path "*/layouts/shortcodes/img.html" -type f | head -n 1)"
@@ -167,14 +166,15 @@ jobs:
             echo "========================================================"
             echo "Processing: $FILE_PATH"
             
-            echo "--- Snippet BEFORE replacement ---"
-            grep -C 2 "$OLD_TEXT" "$FILE_PATH" || echo "Note: '$OLD_TEXT' not found in this file."
+            echo "--- Snippets BEFORE replacement ---"
+            grep -E "$OLD_WIDTH|$OLD_FORMAT" "$FILE_PATH" || echo "Note: Target values not found."
 
-            # Perform the replacement
-            sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$FILE_PATH"
+            # Perform the replacements for width and format
+            sed -i "s|${OLD_WIDTH}|${NEW_WIDTH}|g" "$FILE_PATH"
+            sed -i "s|${OLD_FORMAT}|${NEW_FORMAT}|g" "$FILE_PATH"
             
-            echo "--- Snippet AFTER replacement ---"
-            grep -C 2 "$NEW_TEXT" "$FILE_PATH"
+            echo "--- Snippets AFTER replacement ---"
+            grep -E "$NEW_WIDTH|$NEW_FORMAT" "$FILE_PATH"
           else
             echo "Warning: File not found: $FILE_PATH"
           fi
