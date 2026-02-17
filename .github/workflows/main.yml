@@ -122,7 +122,7 @@ jobs:
       run: |
         SHORTCODE_PATH=$(find . -path "*/shortcodes/responsiveImage.html" -type f | head -n 1)
         OLD_TEXT='slice 1600'
-        NEW_TEXT='slice 480'
+        NEW_TEXT='slice 800'
 
         echo "vars.PAGES_GITHUB_IMAGE_WIDTHS: " ${{ vars.PAGES_GITHUB_IMAGE_WIDTHS }}
         
@@ -145,7 +145,7 @@ jobs:
       working-directory: blog
       run: |
         # Define the target variable from GitHub Vars
-        NEW_TEXT='480'
+        NEW_TEXT='800'
         OLD_TEXT='1600'
         
         echo "Target GitHub Pages Widths: $NEW_TEXT"
