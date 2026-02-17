@@ -116,44 +116,38 @@ jobs:
         # Install CLIs here. Since Node is set up, this should work.
         npm install -g wrangler
 
-    # 6.1. Modify for GitHub Pages Widths and Format
-    - name: Modify responsiveImage Shortcode for GitHub Pages Widths and Format
+    # 6.1. Modify for GitHub Pages Widths
+    - name: Modify responsiveImage Shortcode for GitHub Pages Widths
       working-directory: blog
       run: |
         SHORTCODE_PATH=$(find . -path "*/shortcodes/responsiveImage.html" -type f | head -n 1)
         OLD_WIDTH='slice 1600'
         NEW_WIDTH='slice 800'
-        OLD_FORMAT='avif'
-        NEW_FORMAT='webp'
 
         if [ -n "$SHORTCODE_PATH" ]; then
           echo "Found shortcode at: $SHORTCODE_PATH"
 
-          echo "--- Snippets BEFORE replacement (GitHub Pages) ---"
-          # Show both the width slice and the format options line
-          grep -E "$OLD_WIDTH|$OLD_FORMAT" "$SHORTCODE_PATH" || echo "Target text not found."
+          echo "--- Snippet BEFORE replacement (GitHub Pages) ---"
+          grep "$OLD_WIDTH" "$SHORTCODE_PATH" || echo "Target text not found."
 
-          # Perform replacements
+          # Perform replacement for width only
           sed -i "s|${OLD_WIDTH}|${NEW_WIDTH}|g" "$SHORTCODE_PATH"
-          sed -i "s|${OLD_FORMAT}|${NEW_FORMAT}|g" "$SHORTCODE_PATH"
           
-          echo "--- Snippets AFTER replacement (GitHub Pages) ---"
-          # Show the updated lines
-          grep -E "$NEW_WIDTH|$NEW_FORMAT" "$SHORTCODE_PATH"
+          echo "--- Snippet AFTER replacement (GitHub Pages) ---"
+          grep "$NEW_WIDTH" "$SHORTCODE_PATH"
         else
           echo "Warning: responsiveImage.html not found."
         fi
-        
-    - name: Batch Update Image Widths and Format to GitHub Pages Settings
+
+    # 6.2. Modify for GitHub Pages Widths    
+    - name: Batch Update Image Widths to GitHub Pages Settings
       working-directory: blog
       run: |
         # Define the target variables
         NEW_WIDTH='800'
         OLD_WIDTH='1600'
-        NEW_FORMAT='webp'
-        OLD_FORMAT='avif'
         
-        echo "Target GitHub Pages Settings: Width=$NEW_WIDTH, Format=$NEW_FORMAT"
+        echo "Target GitHub Pages Settings: Width=$NEW_WIDTH"
 
         # Define the list of files to process
         FILES_TO_EDIT=(
@@ -167,21 +161,20 @@ jobs:
             echo "========================================================"
             echo "Processing: $FILE_PATH"
             
-            echo "--- Snippets BEFORE replacement ---"
-            grep -E "$OLD_WIDTH|$OLD_FORMAT" "$FILE_PATH" || echo "Note: Target values not found."
+            echo "--- Snippet BEFORE replacement ---"
+            grep "$OLD_WIDTH" "$FILE_PATH" || echo "Note: Target width not found."
 
-            # Perform the replacements for width and format
+            # Perform the replacement for width
             sed -i "s|${OLD_WIDTH}|${NEW_WIDTH}|g" "$FILE_PATH"
-            sed -i "s|${OLD_FORMAT}|${NEW_FORMAT}|g" "$FILE_PATH"
             
-            echo "--- Snippets AFTER replacement ---"
-            grep -E "$NEW_WIDTH|$NEW_FORMAT" "$FILE_PATH"
+            echo "--- Snippet AFTER replacement ---"
+            grep "$NEW_WIDTH" "$FILE_PATH"
           else
             echo "Warning: File not found: $FILE_PATH"
           fi
         done
 
-    # 6.2. Modify for Yandex Verification Tag for GitHub Pages
+    # 6.3. Modify for Yandex Verification Tag for GitHub Pages
     - name: Update Yandex Verification Tag for GitHub Pages
       working-directory: blog
       run: |
