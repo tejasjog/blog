@@ -307,6 +307,36 @@ jobs:
         echo "Scripts & Styles (JS/CSS):"
         find public -regex '.*\.\(js\|css\)' -exec du -ch {} + | grep total || echo "None found"
 
+    # 8.6. Legacy Format Audit
+    - name: Audit for Legacy JPG/JPEG Files in Public
+      working-directory: blog
+      run: |
+        echo "========================================================"
+        echo "AUDITING PUBLIC FOLDER FOR LEGACY JPG/JPEG FILES"
+        echo "========================================================"
+        echo "Expected: All images should be WebP. Checking for leftovers..."
+        
+        # Find all .jpg or .jpeg files (case-insensitive)
+        LEFTOVERS=$(find public -type f -regex '.*\.\(jpg\|jpeg\|JPG\|JPEG\)')
+        
+        if [ -z "$LEFTOVERS" ]; then
+          echo "Success: No JPG/JPEG files found in the public folder."
+        else
+          echo "!!! WARNING: Found legacy image formats in the deployment !!!"
+          echo "These files should have been converted to WebP:"
+          echo "--------------------------------------------------------"
+          echo "$LEFTOVERS"
+          echo "--------------------------------------------------------"
+          
+          # Count the files
+          COUNT=$(echo "$LEFTOVERS" | wc -l)
+          echo "Total legacy files found: $COUNT"
+          
+          echo ""
+          echo "Tip: Check if these images are being copied as 'static' assets"
+          echo "or if a Hugo template is missing the WebP processing filter."
+        fi
+
     # 9. Final Deployment Size Report
     - name: Final Public Folder Size Summary
       working-directory: blog
