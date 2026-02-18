@@ -197,7 +197,7 @@ jobs:
         echo "Hugo build complete. Disk usage after build:"
         du -sh public
         df -h
-  
+
     # 8. Cleanup .droplist Files (Source & Public) - Recursive Path Fix
     - name: Cleanup .droplist Files and Report Deletions
       working-directory: blog
@@ -265,6 +265,14 @@ jobs:
             rm "$DROPLIST_FILE"
           done
         fi
+
+    # 8.5. Remove IndexNow Key
+    - name: Remove IndexNow Key and Cleanup Deployment Files
+      working-directory: blog
+      run: |
+        echo "Removing IndexNow verification file before publishing..."
+        # Remove the specific file from the built public directory
+        rm -f public/90713259142C4858C5DB91DF25E69DBF.txt
 
     # 8.6. Legacy Format Audit
     - name: Audit for Legacy JPG/JPEG Files in Public
@@ -338,38 +346,6 @@ jobs:
       id: deployment
       uses: actions/deploy-pages@v4
 
-    # 10. Extract URLs and Submit to IndexNow (Moved here after deployment)
-    - name: Extract URLs and Submit to IndexNow
-      working-directory: blog
-      run: |
-        echo "Waiting for GitHub Pages deployment to propagate..."
-        # Wait 30 seconds to ensure the new deployment is live across edge nodes
-        sleep 30 
-        
-        # Verify the key file is actually reachable before pinging IndexNow
-        KEY_URL="https://tejasjog.github.io/blog/90713259142C4858C5DB91DF25E69DBF.txt"
-        STATUS=$(curl -o /dev/null -s -w "%{http_code}" "$KEY_URL")
-        
-        if [ "$STATUS" -ne 200 ]; then
-          echo "Error: Key file is not live yet (Status: $STATUS). Aborting IndexNow ping."
-          exit 0 # Exit gracefully so the workflow doesn't fail
-        fi
-
-        echo "Key is live. Extracting URLs from sitemap.xml..."
-        URLS=$(grep -Po '(?<=<loc>)([^<]+)' public/sitemap.xml | sed 's/^/"/;s/$/"/' | paste -sd "," -)
-        
-        echo "Submitting batch request to IndexNow..."
-        JSON_PAYLOAD='{
-          "host": "https://tejasjog.github.io/blog",
-          "key": "90713259142C4858C5DB91DF25E69DBF",
-          "keyLocation": "https://tejasjog.github.io/blog/90713259142C4858C5DB91DF25E69DBF.txt",
-          "urlList": ['"$URLS"']
-        }'
-        
-        curl -X POST "https://api.indexnow.org/IndexNow" \
-             -H "Content-Type: application/json; charset=utf-8" \
-             -d "$JSON_PAYLOAD" -v
-             
     # 11. CRITICAL SPACE CLEANUP
     - name: Cleanup GitHub Pages Build Assets
       working-directory: blog
