@@ -271,13 +271,14 @@ jobs:
           done
         fi
 
-    # 8.5. Remove IndexNow Key
+    # 8.5. Remove IndexNow Key and llms.txt
     - name: Remove IndexNow Key and Cleanup Deployment Files
       working-directory: blog
       run: |
         echo "Removing IndexNow verification file before publishing..."
         # Remove the specific file from the built public directory
         rm -f public/90713259142C4858C5DB91DF25E69DBF.txt
+        rm -f public/llms.txt
         
     # 8.6. Legacy Format Audit
     - name: Audit for Legacy JPG/JPEG Files in Public
