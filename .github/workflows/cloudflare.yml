@@ -333,6 +333,32 @@ jobs:
           echo "!!! CAUTION: Deployment size is over 800 MB (Approaching limit) !!!"
         fi
 
+    # 8.7. Deployment Limit Audit (File Count)
+    - name: Audit File Count for Cloudflare Limits
+      working-directory: blog
+      run: |
+        echo "========================================================"
+        echo "AUDITING FILE COUNT FOR CLOUDFLARE PAGES LIMITS"
+        echo "========================================================"
+        
+        # Count all files in the public directory recursively
+        # -type f ensures we only count files, not directories
+        FILE_COUNT=$(find public -type f | wc -l)
+        LIMIT=20000
+        THRESHOLD=10000
+        
+        echo "Total files found in public/: $FILE_COUNT"
+        
+        if [ "$FILE_COUNT" -gt "$LIMIT" ]; then
+          echo "::error::CRITICAL: File count ($FILE_COUNT) exceeds Cloudflare Free Plan limit ($LIMIT)!"
+          echo "Deployment is likely to fail unless you are on a Paid Plan with Wrangler v4 enabled."
+        elif [ "$FILE_COUNT" -gt "$THRESHOLD" ]; then
+          echo "::warning::CAUTION: File count ($FILE_COUNT) is over 50% of the Free Plan limit ($LIMIT)."
+          echo "Consider optimizing assets or moving large media to Cloudflare R2."
+        else
+          echo "Success: File count is well within limits ($((FILE_COUNT * 100 / LIMIT))% of limit used)."
+        fi
+
     # 9. Cloudflare Deployment Phase & Deploy
     - name: Echo public folder size
       run: |
