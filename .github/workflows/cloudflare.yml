@@ -206,11 +206,19 @@ jobs:
       run: |
         echo "Running Hugo build. Final disk check before build:"
         df -h
-        hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog-blog.pages.dev/' }} --destination public --environment production
+        hugo --gc --minify --cacheDir /dev/shm/hugo_cache --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog-blog.pages.dev/' }} --destination public --environment production
         echo "Hugo build complete. Disk usage after build:"
         du -sh public
         df -h
-        
+
+    - name: Prune for Upload
+      working-directory: blog
+      run: |
+        rm -rf node_modules
+        rm -rf .git
+        # If you have a themes folder with its own .git, remove those too
+        find . -name ".git" -type d -exec rm -rf {} +
+  
     # 8. Cleanup .droplist Files (Source & Public) - Recursive Path Fix
     - name: Cleanup .droplist Files and Report Deletions
       working-directory: blog
