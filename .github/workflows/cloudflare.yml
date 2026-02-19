@@ -57,6 +57,14 @@ jobs:
         echo "Disk usage after aggressive cleanup:"
         df -h
 
+    - name: Nuclear Disk Cleanup
+      run: |
+        sudo docker image prune --all --force
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/powershell /usr/share/swift
+        # Clean up apt completely
+        sudo apt-get clean
+        sudo rm -rf /var/lib/apt/lists/*
+        
     # 1. Checkout Code from GitLab
     - name: Checkout Code with Submodule Authentication
       env:
