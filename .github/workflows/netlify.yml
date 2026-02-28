@@ -5,12 +5,11 @@ on:
 
 jobs:
   deploy:
-    # IMPORTANT: Consistent with main.yml runner suggestion
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pages: write
-      id-token: write # Required for deploy-pages action
+      id-token: write
 
     env:
       DART_SASS_VERSION: 1.97.3
@@ -21,7 +20,6 @@ jobs:
     - name: Free Disk Space (Ubuntu)
       uses: jlumbroso/free-disk-space@main
       with:
-        # This removes large pre-installed tools to free up ~30GB+
         tool-cache: false
         android: true
         dotnet: true
@@ -30,29 +28,29 @@ jobs:
         docker-images: true
         swap-storage: true
 
-    # 0. CRITICAL: EARLY SYSTEM CLEANUP
+    # 0. NUCLEAR CLEANUP (Added from Cloudflare)
+    - name: Nuclear Disk Cleanup
+      run: |
+        sudo docker image prune --all --force
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/powershell /usr/share/swift
+        sudo apt-get clean
+        sudo rm -rf /var/lib/apt/lists/*
+        df -h
+
     - name: Aggressive Runner System Cleanup
       run: |
         echo "Starting aggressive system cleanup..."
-        # 1. Clean apt package cache
         sudo apt-get autoremove -y
         sudo apt-get clean
-
-        # 2. Remove common large tools/caches not needed
-        echo "Removing large tool caches and unnecessary packages..."
         if command -v docker &> /dev/null; then
           sudo docker system prune --all --force
         fi
-
         sudo rm -rf /usr/share/dotnet
         sudo rm -rf /usr/local/lib/android
         sudo rm -rf /opt/ghc
-
-        # Print disk usage after initial cleanup
         echo "Disk usage after aggressive cleanup:"
         df -h
 
-    # 1. Checkout Code from GitLab
     - name: Checkout Code with Submodule Authentication
       env:
         GIT_OAUTH_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
@@ -61,319 +59,128 @@ jobs:
         git clone --depth 1 https://gitlab.com/tejasjog/blog.git
         cd blog
 
-    # 2. Run Submodule Update and Cleanup .git files
     - name: Update Submodules and Cleanup Content Directories
       working-directory: blog
       run: |
-        echo "Attempting to update submodules..."
         git submodule update --init --force --recursive --remote --verbose --depth 1
-
-        echo "Total files in repository (excluding .git):"
         find . -path ./.git -prune -o -type f -print | wc -l
 
-    # 3. Optimized Node.js Setup
     - name: Set up Node.js Environment
       uses: actions/setup-node@v4
       with:
         node-version: ${{ env.NODE_VERSION }}
 
-    # 4. Install Brotli, Dart Sass, and Hugo (Manual install with immediate cleanup)
     - name: Install Dependencies with Cleanup
       run: |
-        echo "Installing system dependencies: brotli, Dart Sass, and Hugo..."
         sudo apt-get update
         sudo apt-get install -y brotli
-
-        # Install Dart Sass
         DART_SASS_FILENAME="dart-sass-${{ env.DART_SASS_VERSION }}-linux-x64.tar.gz"
         curl -LJO https://github.com/sass/dart-sass/releases/download/${{ env.DART_SASS_VERSION }}/$DART_SASS_FILENAME
         tar -xf $DART_SASS_FILENAME
         sudo cp -r dart-sass/* /usr/local/bin/
-        rm -rf dart-sass* # CRITICAL CLEANUP 1
-
-        # Install Hugo
-        HUGO_DEB_FILENAME="hugo_extended_${{ env.HUGO_VERSION }}_linux-amd64.deb"
-        sudo curl -LJO https://github.com/gohugoio/hugo/releases/download/v${{ env.HUGO_VERSION }}/$HUGO_DEB_FILENAME
+        rm -rf dart-sass*
+        HUGO_DEB_FILENAME="hugo_extended_${{ env.HUGO_VERSION_NEW || env.HUGO_VERSION }}_linux-amd64.deb"
+        sudo curl -LJO https://github.com/gohugoio/hugo/releases/download/v${{ env.HUGO_VERSION_NEW || env.HUGO_VERSION }}/$HUGO_DEB_FILENAME
         sudo apt-get install -y ./$HUGO_DEB_FILENAME
-        sudo rm $HUGO_DEB_FILENAME # CRITICAL CLEANUP 2
-
-        # FINAL PACKAGE CLEANUP
+        sudo rm $HUGO_DEB_FILENAME
         sudo apt-get autoremove -y
         sudo apt-get clean
-        echo "Dependencies installed. Disk usage check before npm install:"
-        df -h
 
-    # 5. Install Node Dependencies and Global CLIs
     - name: Install Node Dependencies and Global CLIs
       working-directory: blog
       run: |
         npm install
-        # Install CLIs here. Since Node is set up, this should work.
         npm install -g netlify-cli
 
-    # 6. Modify for Netlify Widths
     - name: Modify responsiveImage Shortcode for Netlify Widths
       working-directory: blog
       run: |
         SHORTCODE_PATH=$(find . -path "*/shortcodes/responsiveImage.html" -type f | head -n 1)
-        OLD_TEXT='slice 1600'
-        NEW_TEXT='${{ vars.NETLIFY_IMAGE_WIDTHS }}'
-
-        echo "vars.NETLIFY_IMAGE_WIDTHS: " ${{ vars.NETLIFY_IMAGE_WIDTHS }}
-        
-        if [ -n "$SHORTCODE_PATH" ]; then
-          echo "Found shortcode at: $SHORTCODE_PATH"
-          echo "--- Snippet BEFORE replacement (Netlify) ---"
-          # Only print the specific line containing the target text
-          grep "$OLD_TEXT" "$SHORTCODE_PATH" || echo "Text not found."
-          sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$SHORTCODE_PATH"
-          echo "--- Snippet AFTER replacement (Netlify) ---"
-          # Only print the line containing the new injected variable
-          grep "${NEW_TEXT}" "$SHORTCODE_PATH"
-        else
-          echo "Warning: responsiveImage.html not found."
-        fi
+        sed -i "s|slice 1600|${{ vars.NETLIFY_IMAGE_WIDTHS }}|g" "$SHORTCODE_PATH"
 
     - name: Batch Update Image Widths to Netlify Settings
       working-directory: blog
       run: |
-        # Define the target variable from GitHub Vars specific to Netlify
         NEW_TEXT='${{ vars.NETLIFY_IMAGE_WIDTHS_IMG }}'
         OLD_TEXT='1600'
-        
-        echo "Target Netlify Widths: $NEW_TEXT"
-
-        # Define the list of files to process
         FILES_TO_EDIT=(
           "$(find . -path "*/_default/_markup/render-image.html" -type f -not -path "./themes/*" | head -n 1)"
           "$(find . -path "*/layouts/shortcodes/img.html" -type f | head -n 1)"
           "$(find . -path "*/layouts/partials/cover_image.html" -type f | head -n 1)"
         )
-
         for FILE_PATH in "${FILES_TO_EDIT[@]}"; do
           if [ -f "$FILE_PATH" ]; then
-            echo "========================================================"
-            echo "Processing: $FILE_PATH"
-            
-            echo "--- Snippet BEFORE replacement ---"
-            grep -C 2 "$OLD_TEXT" "$FILE_PATH" || echo "Note: '$OLD_TEXT' not found in this file."
-
-            # Perform the replacement
             sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$FILE_PATH"
-            
-            echo "--- Snippet AFTER replacement ---"
-            grep -C 2 "$NEW_TEXT" "$FILE_PATH"
-          else
-            echo "Warning: File not found: $FILE_PATH"
           fi
         done
 
-    # 6.5. Modify for Yandex Verification Tag for Netlify
     - name: Update Yandex Verification Tag for Netlify
       working-directory: blog
       run: |
-        echo "--- Verification tag BEFORE replacement ---"
-        grep "SiteVerificationTag: yandex-SiteVerificationTag" hugo.yaml || echo "Tag not found!"
-
-        echo "Updating Yandex SiteVerificationTag for Netlify..."
         sed -i "s/SiteVerificationTag: yandex-SiteVerificationTag/SiteVerificationTag: ${{ vars.NETLIFY_YANDEX_SITEVERIFICATIONTAG }}/g" hugo.yaml
         
-        echo "--- Verification tag AFTER replacement ---"
-        grep "SiteVerificationTag" hugo.yaml
-        
-    # 7. Build Hugo Site
     - name: Build Hugo Site (for Netlify)
       working-directory: blog
       run: |
-        echo "Running Hugo build. Final disk check before build:"
-        df -h
         hugo --gc --minify --baseURL ${{ vars.CI_NETLIFY_URL || 'https://tejasjog-blog.netlify.app/' }} --destination public --environment production
-        echo "Hugo build complete. Disk usage after build:"
-        du -sh public
-        df -h
 
-    # 8. Cleanup .droplist Files (Source & Public) - Recursive Path Fix
+    # NEW: Prune for Upload (Added from Cloudflare)
+    - name: Prune for Upload
+      working-directory: blog
+      run: |
+        rm -rf node_modules
+        rm -rf .git
+        find . -name ".git" -type d -exec rm -rf {} +
+
     - name: Cleanup .droplist Files and Report Deletions
       working-directory: blog
       run: |
-        echo "========================================================"
-        echo "SEARCHING FOR .DROPLIST FILES"
-        echo "========================================================"
         DROPLIST_FILES=$(find . -name "*.droplist")
-        
-        if [ -z "$DROPLIST_FILES" ]; then
-          echo "No .droplist files found."
-        else
+        if [ -n "$DROPLIST_FILES" ]; then
           for DROPLIST_FILE in $DROPLIST_FILES; do
-            echo "--------------------------------------------------------"
-            echo "Processing droplist: $DROPLIST_FILE"
-            
-            # 1. Get the directory containing the droplist
-            # Example: ./content/posts/2025/09/19
-            # Example: ./public/posts/2025/09/19
             BASE_DIR=$(dirname "$DROPLIST_FILE")
-            
             while IFS= read -r ENTRY || [ -n "$ENTRY" ]; do
-              if [ -z "$ENTRY" ]; then continue; fi
-              
-              # 2. Handle entries that might have subfolders (e.g., images/photo.jpg)
-              # Split into folder and filename
+              [ -z "$ENTRY" ] && continue
               FILE_NAME=$(basename "$ENTRY")
-              SUB_DIR=$(dirname "$ENTRY")
-              if [ "$SUB_DIR" = "." ]; then SUB_DIR=""; else SUB_DIR="/$SUB_DIR"; fi
-
-              # 3. Calculate Case Variations for the filename
-              base="${FILE_NAME%.*}"
-              ext="${FILE_NAME##*.}"
-              base_l=$(echo "$base" | tr '[:upper:]' '[:lower:]')
-              base_u=$(echo "$base" | tr '[:lower:]' '[:upper:]')
-              ext_l=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
-              ext_u=$(echo "$ext" | tr '[:lower:]' '[:upper:]')
-
-              VAR_NAMES=(
-                "$FILE_NAME"
-                "${base_l}.${ext_l}"
-                "${base_u}.${ext_u}"
-                "${base_u}.${ext_l}"
-                "${base_l}.${ext_u}"
-              )
-
-              DELETED_ANY=false
-              for name in $(printf "%s\n" "${VAR_NAMES[@]}" | sort -u); do
-                # Construct the path using the directory where the droplist was found
-                # This works regardless of whether the droplist is in 'content' or 'public'
-                TARGET_PATH="${BASE_DIR}${SUB_DIR}/${name}"
-                
-                if [ -f "$TARGET_PATH" ]; then
-                  rm "$TARGET_PATH"
-                  echo "[DELETED] $TARGET_PATH"
-                  DELETED_ANY=true
-                fi
-              done
-
-              if [ "$DELETED_ANY" = false ]; then
-                echo "[NOT FOUND] $ENTRY (checked all variants in ${BASE_DIR}${SUB_DIR})"
-              fi
+              rm -f "${BASE_DIR}/${FILE_NAME}"* 2>/dev/null || true
             done < "$DROPLIST_FILE"
-            
-            rm "$DROPLIST_FILE"
+            rm "$f"
           done
         fi
 
-    # 8.6. Legacy Format Audit
     - name: Audit for Legacy JPG/JPEG Files in Public
       working-directory: blog
       run: |
-        echo "========================================================"
-        echo "AUDITING PUBLIC FOLDER FOR UNPROCESSED JPG/JPEG FILES"
-        echo "========================================================"
-        echo "Note: Files containing '_hu_' are processed and will be ignored."
-        
-        # Find jpg/jpeg files and exclude those containing '_hu_'
-        LEFTOVERS=$(find public -type f -regex '.*\.\(jpg\|jpeg\|JPG\|JPEG\)' | grep -v "_hu_" || true)
-        
-        if [ -z "$LEFTOVERS" ]; then
-          echo "Success: No unprocessed legacy JPG/JPEG files found."
-        else
-          echo "!!! WARNING: Found unprocessed legacy images in the deployment !!!"
-          echo "These files lack the '_hu_' suffix and should be converted to WebP:"
-          echo "--------------------------------------------------------"
-          echo "$LEFTOVERS"
-          echo "--------------------------------------------------------"
-          
-          # Count the files
-          COUNT=$(echo "$LEFTOVERS" | grep -c .)
-          echo "Total unprocessed legacy files found: $COUNT"
-          
-          echo ""
-          echo "Tip: These are likely static assets that bypassed your Hugo pipes."
-          echo "Check your 'static/' folder or resources that aren't being processed."
-        fi
+        find public -type f -regex '.*\.\(jpg\|jpeg\|JPG\|JPEG\)' | grep -v "_hu_" || true
 
-    # 9. Final Deployment Size Report
     - name: Final Public Folder Size Summary
       working-directory: blog
       run: |
-        echo "========================================================"
-        echo "FINAL DEPLOYMENT SIZE REPORT"
-        echo "========================================================"
-        
-        # 1. Total size of the public folder
-        TOTAL_SIZE=$(du -sh public | cut -f1)
-        echo "TOTAL DEPLOYABLE SIZE: $TOTAL_SIZE"
-        
-        echo ""
-        echo "--- TOP 10 LARGEST DIRECTORIES ---"
-        # Shows exactly which sections of your site are taking the most space
-        du -h --max-depth=3 public | sort -hr | head -n 10
-        
-        echo ""
-        echo "--- TOP 20 LARGEST INDIVIDUAL FILES ---"
-        # Lists the specific files (likely high-res images) contributing to bloat
-        find public -type f -exec du -h {} + | sort -hr | head -n 20
-        
-        echo ""
-        # Alert if the size is approaching the 1GB limit
+        du -sh public
         SIZE_BYTES=$(du -sb public | cut -f1)
-        LIMIT_BYTES=1073741824 # 1 GB in bytes
-        if [ "$SIZE_BYTES" -gt "$LIMIT_BYTES" ]; then
-          echo "!!! WARNING: Deployment size exceeds 1 GB limit !!!"
-        elif [ "$SIZE_BYTES" -gt 858993459 ]; then
-          echo "!!! CAUTION: Deployment size is over 800 MB (Approaching limit) !!!"
-        fi
+        if [ "$SIZE_BYTES" -gt 1073741824 ]; then echo "!!! WARNING: Over 1GB !!!"; fi
 
-    # 9. Netlify Deployment Phase & Deploy
-    - name: Echo public folder size
+    # NEW: File Count Audit (Added from Cloudflare)
+    - name: Audit File Count
+      working-directory: blog
       run: |
-        echo "Calculating the size of the public folder..."
-        du -sh blog/public
+        FILE_COUNT=$(find public -type f | wc -l)
+        echo "Total files in public/: $FILE_COUNT"
 
     - name: Netlify Deployment Phase
       working-directory: blog
-      run: |
-        echo "Starting Netlify deployment..."
-        netlify deploy --prod --dir public --site ${{ secrets.NETLIFY_SITE_ID }}
+      run: netlify deploy --prod --dir public --site ${{ secrets.NETLIFY_SITE_ID }}
       env:
         NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ACCESS_TOKEN }}
 
-    # 10. Extract URLs and Submit to IndexNow (Moved after deployment)
     - name: Extract URLs and Submit to IndexNow
       working-directory: blog
       run: |
-        echo "Waiting for Netlify deployment to propagate..."
-        # Wait 30 seconds to ensure the new deployment is live across edge nodes
         sleep 30 
-        
-        # Verify the key file is actually reachable before pinging IndexNow
-        KEY_URL="https://tejasjog-blog.netlify.app/90713259142C4858C5DB91DF25E69DBF.txt"
-        STATUS=$(curl -o /dev/null -s -w "%{http_code}" "$KEY_URL")
-        
-        if [ "$STATUS" -ne 200 ]; then
-          echo "Error: Key file is not live yet (Status: $STATUS). Aborting IndexNow ping."
-          exit 0 # Exit gracefully so the workflow doesn't fail
-        fi
-
-        echo "Key is live. Extracting URLs from sitemap.xml..."
         URLS=$(grep -Po '(?<=<loc>)([^<]+)' public/sitemap.xml | sed 's/^/"/;s/$/"/' | paste -sd "," -)
-        
-        echo "Submitting batch request to IndexNow..."
-        JSON_PAYLOAD='{
-          "host": "tejasjog-blog.netlify.app",
-          "key": "90713259142C4858C5DB91DF25E69DBF",
-          "keyLocation": "https://tejasjog-blog.netlify.app/90713259142C4858C5DB91DF25E69DBF.txt",
-          "urlList": ['"$URLS"']
-        }'
-        
-        curl -X POST "https://api.indexnow.org/IndexNow" \
-             -H "Content-Type: application/json; charset=utf-8" \
-             -d "$JSON_PAYLOAD" -v
+        JSON_PAYLOAD='{"host": "tejasjog-blog.netlify.app", "key": "90713259142C4858C5DB91DF25E69DBF", "urlList": ['"$URLS"']}'
+        curl -X POST "https://api.indexnow.org/IndexNow" -H "Content-Type: application/json; charset=utf-8" -d "$JSON_PAYLOAD"
 
-    # 11. CRITICAL SPACE CLEANUP
     - name: Cleanup Netlify Build Assets
       working-directory: blog
-      run: |
-        echo "Cleaning up public directory to free space..."
-        rm -rf public
-        echo "Cleanup complete. Disk usage after cleanup:"
-        df -h
-        
+      run: rm -rf public
