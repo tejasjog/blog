@@ -208,13 +208,14 @@ jobs:
         rm -rf .git
         find . -name ".git" -type d -exec rm -rf {} +      
 
-# 8. Cleanup .droplist Files (Source & Public) - Recursive Path Fix
+    # 8. Cleanup .droplist Files (Source & Public) - Recursive Path Fix
     - name: Cleanup .droplist Files and Report Deletions
       working-directory: blog
       run: |
         echo "========================================================"
         echo "SEARCHING FOR .DROPLIST FILES"
         echo "========================================================"
+        # Find all .droplist files
         DROPLIST_FILES=$(find . -name "*.droplist")
         
         if [ -z "$DROPLIST_FILES" ]; then
@@ -229,21 +230,28 @@ jobs:
             while IFS= read -r ENTRY || [ -n "$ENTRY" ]; do
               if [ -z "$ENTRY" ]; then continue; fi
               
+              # Extract the filename and any potential subdirectory from the entry
               FILE_NAME=$(basename "$ENTRY")
               SUB_DIR=$(dirname "$ENTRY")
-              if [ "$SUB_DIR" = "." ]; then SUB_DIR=""; else SUB_DIR="/$SUB_DIR"; fi
-
-              # Using a wildcard match to handle common extensions/cases safely
-              # This mirrors the logic you were attempting in the failed run
-              TARGET_PATTERN="${BASE_DIR}${SUB_DIR}/${FILE_NAME}"
               
-              echo "Checking for variations of: $TARGET_PATTERN"
-              # Find and remove files matching the name regardless of case/extension variations
-              find "${BASE_DIR}${SUB_DIR}" -maxdepth 1 -name "${FILE_NAME}*" -exec rm -v {} + || true
+              # Determine the exact directory to search in
+              if [ "$SUB_DIR" = "." ]; then
+                SEARCH_PATH="$BASE_DIR"
+              else
+                SEARCH_PATH="${BASE_DIR}/${SUB_DIR}"
+              fi
+
+              if [ -d "$SEARCH_PATH" ]; then
+                echo "Searching in: $SEARCH_PATH for variations of: $FILE_NAME"
+                # Use -iname for CASE-INSENSITIVE matching
+                # Use -maxdepth 1 to stay within the specific folder
+                find "$SEARCH_PATH" -maxdepth 1 -iname "${FILE_NAME}*" -exec rm -v {} + || true
+              else
+                echo "[SKIP] Directory not found: $SEARCH_PATH"
+              fi
               
             done < "$DROPLIST_FILE"
             
-            # FIXED: Changed "$f" to "$DROPLIST_FILE"
             rm "$DROPLIST_FILE"
           done
         fi
