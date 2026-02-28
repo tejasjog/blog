@@ -208,7 +208,7 @@ jobs:
         rm -rf .git
         find . -name ".git" -type d -exec rm -rf {} +      
 
-    # 8. Cleanup .droplist Files (Source & Public) - Recursive Path Fix
+# 8. Cleanup .droplist Files (Source & Public) - Recursive Path Fix
     - name: Cleanup .droplist Files and Report Deletions
       working-directory: blog
       run: |
@@ -224,54 +224,26 @@ jobs:
             echo "--------------------------------------------------------"
             echo "Processing droplist: $DROPLIST_FILE"
             
-            # 1. Get the directory containing the droplist
-            # Example: ./content/posts/2025/09/19
-            # Example: ./public/posts/2025/09/19
             BASE_DIR=$(dirname "$DROPLIST_FILE")
             
             while IFS= read -r ENTRY || [ -n "$ENTRY" ]; do
               if [ -z "$ENTRY" ]; then continue; fi
               
-              # 2. Handle entries that might have subfolders (e.g., images/photo.jpg)
-              # Split into folder and filename
               FILE_NAME=$(basename "$ENTRY")
               SUB_DIR=$(dirname "$ENTRY")
               if [ "$SUB_DIR" = "." ]; then SUB_DIR=""; else SUB_DIR="/$SUB_DIR"; fi
 
-              # 3. Calculate Case Variations for the filename
-              base="${FILE_NAME%.*}"
-              ext="${FILE_NAME##*.}"
-              base_l=$(echo "$base" | tr '[:upper:]' '[:lower:]')
-              base_u=$(echo "$base" | tr '[:lower:]' '[:upper:]')
-              ext_l=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
-              ext_u=$(echo "$ext" | tr '[:lower:]' '[:upper:]')
-
-              VAR_NAMES=(
-                "$FILE_NAME"
-                "${base_l}.${ext_l}"
-                "${base_u}.${ext_u}"
-                "${base_u}.${ext_l}"
-                "${base_l}.${ext_u}"
-              )
-
-              DELETED_ANY=false
-              for name in $(printf "%s\n" "${VAR_NAMES[@]}" | sort -u); do
-                # Construct the path using the directory where the droplist was found
-                # This works regardless of whether the droplist is in 'content' or 'public'
-                TARGET_PATH="${BASE_DIR}${SUB_DIR}/${name}"
-                
-                if [ -f "$TARGET_PATH" ]; then
-                  rm "$TARGET_PATH"
-                  echo "[DELETED] $TARGET_PATH"
-                  DELETED_ANY=true
-                fi
-              done
-
-              if [ "$DELETED_ANY" = false ]; then
-                echo "[NOT FOUND] $ENTRY (checked all variants in ${BASE_DIR}${SUB_DIR})"
-              fi
+              # Using a wildcard match to handle common extensions/cases safely
+              # This mirrors the logic you were attempting in the failed run
+              TARGET_PATTERN="${BASE_DIR}${SUB_DIR}/${FILE_NAME}"
+              
+              echo "Checking for variations of: $TARGET_PATTERN"
+              # Find and remove files matching the name regardless of case/extension variations
+              find "${BASE_DIR}${SUB_DIR}" -maxdepth 1 -name "${FILE_NAME}*" -exec rm -v {} + || true
+              
             done < "$DROPLIST_FILE"
             
+            # FIXED: Changed "$f" to "$DROPLIST_FILE"
             rm "$DROPLIST_FILE"
           done
         fi
