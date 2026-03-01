@@ -12,31 +12,26 @@ jobs:
       id-token: write
 
     steps:
-      # 1. Manually clone from GitLab (actions/checkout only supports GitHub)
+      # 1. Clone the GitLab repository
       - name: Clone GitLab Repository
         env:
           GL_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
         run: |
-          # We clone into a folder named 'gitlab-content' to keep things organized
           git clone --depth 1 "https://oauth2:${GL_TOKEN}@gitlab.com/tejasjog/blog.git" gitlab-content
 
-      # 2. Prepare the deployment folder
+      # 2. Prepare the deployment folder using the path verified by logs
       - name: Prepare Files
         run: |
           mkdir -p staging
           
-          # Look for the file inside the cloned directory
-          # Checking both potential paths based on your previous logs
-          if [ -f "gitlab-content/blog/github.io/index.html" ]; then
-            cp gitlab-content/blog/github.io/index.html staging/index.html
-            echo "Found file in gitlab-content/blog/github.io/"
-          elif [ -f "gitlab-content/github.io/index.html" ]; then
-            cp gitlab-content/github.io/index.html staging/index.html
-            echo "Found file in gitlab-content/github.io/"
+          # Based on your logs, the file is at: gitlab-content/gitlab.io/index.html
+          TARGET="gitlab-content/github.io/index.html"
+          
+          if [ -f "$TARGET" ]; then
+            cp "$TARGET" staging/index.html
+            echo "Successfully found and copied index.html"
           else
-            echo "ERROR: index.html not found!"
-            echo "Showing directory structure for debugging:"
-            ls -R gitlab-content
+            echo "ERROR: File $TARGET not found!"
             exit 1
           fi
 
