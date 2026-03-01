@@ -1,357 +1,56 @@
-name: Deploy to GitHub Pages from GitLab - Hugo blog 
+name: Deploy Single File from GitLab to GitHub Pages
 
 on:
   workflow_dispatch:
 
 jobs:
   deploy:
-    # IMPORTANT: Consider using 'ubuntu-20.04' instead of 'ubuntu-latest'
-    # if 'ubuntu-latest' (currently 24.04) has less disk space on your self-hosted runner.
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pages: write
-      id-token: write # Required for deploy-pages action
-
-    env:
-      DART_SASS_VERSION: 1.97.3
-      HUGO_VERSION: 0.155.3
-      NODE_VERSION: 20
+      id-token: write
 
     steps:
-    - name: Free Disk Space (Ubuntu)
-      uses: jlumbroso/free-disk-space@main
-      with:
-        # This removes large pre-installed tools to free up ~30GB+
-        tool-cache: false
-        android: true
-        dotnet: true
-        haskell: true
-        large-packages: true
-        docker-images: true
-        swap-storage: true
-    # 0. CRITICAL: EARLY SYSTEM CLEANUP
-    # This step is designed to aggressively free up space before any installation or cloning.
-    - name: Aggressive Runner System Cleanup
-      run: |
-        echo "Starting aggressive system cleanup..."
-        # 1. Clean apt package cache
-        sudo apt-get autoremove -y
-        sudo apt-get clean
+      # 1. Checkout the specific GitLab repository
+      # This clones tejasjog/blog directly into the runner's workspace
+      - name: Checkout GitLab Repository
+        uses: actions/checkout@v4
+        with:
+          repository: 'tejasjog/blog'
+          token: ${{ secrets.GITLAB_ACCESS_TOKEN }}
+          fetch-depth: 1
 
-        # 2. Remove common large tools/caches not needed for this workflow (e.g., Azure, Docker images)
-        # Check if these directories exist before trying to remove them.
-        echo "Removing large tool caches and unnecessary packages..."
-
-        # Docker images can be huge; removing them is often the biggest win
-        if command -v docker &> /dev/null; then
-          sudo docker system prune --all --force
-        fi
-
-        # Remove large .NET and Android SDK packages
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /usr/local/lib/android
-        sudo rm -rf /opt/ghc
-
-        # Print disk usage after initial cleanup
-        echo "Disk usage after aggressive cleanup:"
-        df -h
-
-    # 1. Checkout Code from GitLab
-    - name: Checkout Code with Submodule Authentication
-      env:
-        GIT_OAUTH_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
-      run: |
-        git config --global url."https://oauth2:$GIT_OAUTH_TOKEN@gitlab.com".insteadOf "https://gitlab.com"
-        git clone --depth 1 https://gitlab.com/tejasjog/blog.git
-        cd blog
-
-    # 2. Run Submodule Update and Cleanup .git files
-    - name: Update Submodules and Cleanup Content Directories
-      working-directory: blog
-      run: |
-        echo "Attempting to update submodules..."
-        git submodule update --init --force --recursive --remote --verbose --depth 1
-
-        echo "Total files in repository (excluding .git):"
-        find . -path ./.git -prune -o -type f -print | wc -l
-
-    # 3. Optimized Node.js Setup
-    - name: Set up Node.js Environment
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ env.NODE_VERSION }}
-
-    # 4. Install Brotli, Dart Sass, and Hugo (Manual install with immediate cleanup)
-    - name: Install Dependencies with Cleanup
-      run: |
-        echo "Installing system dependencies: brotli, Dart Sass, and Hugo..."
-        sudo apt-get update
-        sudo apt-get install -y brotli
-
-        # Install Dart Sass
-        DART_SASS_FILENAME="dart-sass-${{ env.DART_SASS_VERSION }}-linux-x64.tar.gz"
-        curl -LJO https://github.com/sass/dart-sass/releases/download/${{ env.DART_SASS_VERSION }}/$DART_SASS_FILENAME
-        tar -xf $DART_SASS_FILENAME
-        sudo cp -r dart-sass/* /usr/local/bin/
-        rm -rf dart-sass* # CRITICAL CLEANUP 1
-
-        # Install Hugo
-        HUGO_DEB_FILENAME="hugo_extended_${{ env.HUGO_VERSION }}_linux-amd64.deb"
-        sudo curl -LJO https://github.com/gohugoio/hugo/releases/download/v${{ env.HUGO_VERSION }}/$HUGO_DEB_FILENAME
-        sudo apt-get install -y ./$HUGO_DEB_FILENAME
-        sudo rm $HUGO_DEB_FILENAME # CRITICAL CLEANUP 2
-
-        # FINAL PACKAGE CLEANUP
-        sudo apt-get autoremove -y
-        sudo apt-get clean
-        echo "Dependencies installed. Disk usage check before npm install:"
-        df -h
-
-    # 5. Install Node Dependencies and Global CLIs
-    - name: Install Node Dependencies and Global CLIs
-      working-directory: blog
-      run: |
-        npm install
-        # Install CLIs here. Since Node is set up, this should work.
-        npm install -g wrangler
-
-    # 6.1. Modify for GitHub Pages Widths
-    - name: Modify responsiveImage Shortcode for GitHub Pages Widths
-      working-directory: blog
-      run: |
-        SHORTCODE_PATH=$(find . -path "*/shortcodes/responsiveImage.html" -type f | head -n 1)
-        OLD_WIDTH='slice 1600'
-        NEW_WIDTH='slice 800'
-
-        if [ -n "$SHORTCODE_PATH" ]; then
-          echo "Found shortcode at: $SHORTCODE_PATH"
-
-          echo "--- Snippet BEFORE replacement (GitHub Pages) ---"
-          grep "$OLD_WIDTH" "$SHORTCODE_PATH" || echo "Target text not found."
-
-          # Perform replacement for width only
-          sed -i "s|${OLD_WIDTH}|${NEW_WIDTH}|g" "$SHORTCODE_PATH"
+      # 2. Prepare the deployment folder
+      - name: Prepare Files
+        run: |
+          mkdir -p staging
           
-          echo "--- Snippet AFTER replacement (GitHub Pages) ---"
-          grep "$NEW_WIDTH" "$SHORTCODE_PATH"
-        else
-          echo "Warning: responsiveImage.html not found."
-        fi
-
-    # 6.2. Modify for GitHub Pages Widths    
-    - name: Batch Update Image Widths to GitHub Pages Settings
-      working-directory: blog
-      run: |
-        # Define the target variables
-        NEW_WIDTH='800'
-        OLD_WIDTH='1600'
-        
-        echo "Target GitHub Pages Settings: Width=$NEW_WIDTH"
-
-        # Define the list of files to process
-        FILES_TO_EDIT=(
-          "$(find . -path "*/_default/_markup/render-image.html" -type f -not -path "./themes/*" | head -n 1)"
-          "$(find . -path "*/layouts/shortcodes/img.html" -type f | head -n 1)"
-          "$(find . -path "*/layouts/partials/cover_image.html" -type f | head -n 1)"
-        )
-
-        for FILE_PATH in "${FILES_TO_EDIT[@]}"; do
-          if [ -f "$FILE_PATH" ]; then
-            echo "========================================================"
-            echo "Processing: $FILE_PATH"
-            
-            echo "--- Snippet BEFORE replacement ---"
-            grep "$OLD_WIDTH" "$FILE_PATH" || echo "Note: Target width not found."
-
-            # Perform the replacement for width
-            sed -i "s|${OLD_WIDTH}|${NEW_WIDTH}|g" "$FILE_PATH"
-            
-            echo "--- Snippet AFTER replacement ---"
-            grep "$NEW_WIDTH" "$FILE_PATH"
+          # Based on your repo path: blog/github.io/index.html
+          # Note: 'actions/checkout' usually places the repo contents at the root.
+          # If the folder 'blog' is part of the repo structure:
+          if [ -f "blog/github.io/index.html" ]; then
+            cp blog/github.io/index.html staging/index.html
+            echo "Successfully found file in blog/github.io/"
+          
+          # If 'github.io' is at the root of the repo:
+          elif [ -f "github.io/index.html" ]; then
+            cp github.io/index.html staging/index.html
+            echo "Successfully found file in github.io/"
+          
           else
-            echo "Warning: File not found: $FILE_PATH"
+            echo "ERROR: index.html not found in expected paths!"
+            ls -R
+            exit 1
           fi
-        done
 
-    # 6.3. Modify for Yandex Verification Tag for GitHub Pages
-    - name: Update Yandex Verification Tag for GitHub Pages
-      working-directory: blog
-      run: |
-        echo "--- Verification tag BEFORE replacement ---"
-        grep "SiteVerificationTag: yandex-SiteVerificationTag" hugo.yaml || echo "Tag not found!"
+      # 3. Upload to GitHub Pages
+      - name: Upload Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'staging'
 
-        echo "Updating Yandex SiteVerificationTag for GitHub Pages..."
-        sed -i "s/SiteVerificationTag: yandex-SiteVerificationTag/SiteVerificationTag: ${{ vars.PAGES_GITHUB_YANDEX_SITEVERIFICATIONTAG }}/g" hugo.yaml
-        
-        echo "--- Verification tag AFTER replacement ---"
-        grep "SiteVerificationTag" hugo.yaml
-        
-    # 7. Build Hugo Site (First Build - Where it was failing)
-    - name: Build Hugo Site (for GitHub Pages)
-      working-directory: blog
-      run: |
-        echo "Running Hugo build. Final disk check before build:"
-        df -h
-        hugo --gc --minify --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog.github.io/blog/' }} --destination public --environment production
-        echo "Hugo build complete. Disk usage after build:"
-        du -sh public
-        df -h
-
-    # 8. Cleanup .droplist Files (Source & Public) - Recursive Path Fix
-    - name: Cleanup .droplist Files and Report Deletions
-      working-directory: blog
-      run: |
-        echo "========================================================"
-        echo "SEARCHING FOR .DROPLIST FILES"
-        echo "========================================================"
-        DROPLIST_FILES=$(find . -name "*.droplist")
-        
-        if [ -z "$DROPLIST_FILES" ]; then
-          echo "No .droplist files found."
-        else
-          for DROPLIST_FILE in $DROPLIST_FILES; do
-            echo "--------------------------------------------------------"
-            echo "Processing droplist: $DROPLIST_FILE"
-            
-            # 1. Get the directory containing the droplist
-            # Example: ./content/posts/2025/09/19
-            # Example: ./public/posts/2025/09/19
-            BASE_DIR=$(dirname "$DROPLIST_FILE")
-            
-            while IFS= read -r ENTRY || [ -n "$ENTRY" ]; do
-              if [ -z "$ENTRY" ]; then continue; fi
-              
-              # 2. Handle entries that might have subfolders (e.g., images/photo.jpg)
-              # Split into folder and filename
-              FILE_NAME=$(basename "$ENTRY")
-              SUB_DIR=$(dirname "$ENTRY")
-              if [ "$SUB_DIR" = "." ]; then SUB_DIR=""; else SUB_DIR="/$SUB_DIR"; fi
-
-              # 3. Calculate Case Variations for the filename
-              base="${FILE_NAME%.*}"
-              ext="${FILE_NAME##*.}"
-              base_l=$(echo "$base" | tr '[:upper:]' '[:lower:]')
-              base_u=$(echo "$base" | tr '[:lower:]' '[:upper:]')
-              ext_l=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
-              ext_u=$(echo "$ext" | tr '[:lower:]' '[:upper:]')
-
-              VAR_NAMES=(
-                "$FILE_NAME"
-                "${base_l}.${ext_l}"
-                "${base_u}.${ext_u}"
-                "${base_u}.${ext_l}"
-                "${base_l}.${ext_u}"
-              )
-
-              DELETED_ANY=false
-              for name in $(printf "%s\n" "${VAR_NAMES[@]}" | sort -u); do
-                # Construct the path using the directory where the droplist was found
-                # This works regardless of whether the droplist is in 'content' or 'public'
-                TARGET_PATH="${BASE_DIR}${SUB_DIR}/${name}"
-                
-                if [ -f "$TARGET_PATH" ]; then
-                  rm "$TARGET_PATH"
-                  echo "[DELETED] $TARGET_PATH"
-                  DELETED_ANY=true
-                fi
-              done
-
-              if [ "$DELETED_ANY" = false ]; then
-                echo "[NOT FOUND] $ENTRY (checked all variants in ${BASE_DIR}${SUB_DIR})"
-              fi
-            done < "$DROPLIST_FILE"
-            
-            rm "$DROPLIST_FILE"
-          done
-        fi
-
-    # 8.5. Remove IndexNow Key and llms.txt
-    - name: Remove IndexNow Key and Cleanup Deployment Files
-      working-directory: blog
-      run: |
-        echo "Removing IndexNow verification file before publishing..."
-        # Remove the specific file from the built public directory
-        rm -f public/90713259142C4858C5DB91DF25E69DBF.txt
-        rm -f public/llms.txt
-        
-    # 8.6. Legacy Format Audit
-    - name: Audit for Legacy JPG/JPEG Files in Public
-      working-directory: blog
-      run: |
-        echo "========================================================"
-        echo "AUDITING PUBLIC FOLDER FOR UNPROCESSED JPG/JPEG FILES"
-        echo "========================================================"
-        echo "Note: Files containing '_hu_' are processed and will be ignored."
-        
-        # Find jpg/jpeg files and exclude those containing '_hu_'
-        LEFTOVERS=$(find public -type f -regex '.*\.\(jpg\|jpeg\|JPG\|JPEG\)' | grep -v "_hu_" || true)
-        
-        if [ -z "$LEFTOVERS" ]; then
-          echo "Success: No unprocessed legacy JPG/JPEG files found."
-        else
-          echo "!!! WARNING: Found unprocessed legacy images in the deployment !!!"
-          echo "These files lack the '_hu_' suffix and should be converted to WebP:"
-          echo "--------------------------------------------------------"
-          echo "$LEFTOVERS"
-          echo "--------------------------------------------------------"
-          
-          # Count the files
-          COUNT=$(echo "$LEFTOVERS" | grep -c .)
-          echo "Total unprocessed legacy files found: $COUNT"
-          
-          echo ""
-          echo "Tip: These are likely static assets that bypassed your Hugo pipes."
-          echo "Check your 'static/' folder or resources that aren't being processed."
-        fi
-
-    # 9. Final Deployment Size Report
-    - name: Final Public Folder Size Summary
-      working-directory: blog
-      run: |
-        echo "========================================================"
-        echo "FINAL DEPLOYMENT SIZE REPORT"
-        echo "========================================================"
-        
-        # 1. Total size of the public folder
-        TOTAL_SIZE=$(du -sh public | cut -f1)
-        echo "TOTAL DEPLOYABLE SIZE: $TOTAL_SIZE"
-        
-        echo ""
-        echo "--- TOP 10 LARGEST DIRECTORIES ---"
-        # Shows exactly which sections of your site are taking the most space
-        du -h --max-depth=3 public | sort -hr | head -n 10
-        
-        echo ""
-        echo "--- TOP 20 LARGEST INDIVIDUAL FILES ---"
-        # Lists the specific files (likely high-res images) contributing to bloat
-        find public -type f -exec du -h {} + | sort -hr | head -n 20
-        
-        echo ""
-        # Alert if the size is approaching the 1GB limit
-        SIZE_BYTES=$(du -sb public | cut -f1)
-        LIMIT_BYTES=1073741824 # 1 GB in bytes
-        if [ "$SIZE_BYTES" -gt "$LIMIT_BYTES" ]; then
-          echo "!!! WARNING: Deployment size exceeds 1 GB limit !!!"
-        elif [ "$SIZE_BYTES" -gt 858993459 ]; then
-          echo "!!! CAUTION: Deployment size is over 800 MB (Approaching limit) !!!"
-        fi
-
-    # 9. 5. GitHub Pages Deployment Phase & Deploy
-    - name: Upload Artifact
-      uses: actions/upload-pages-artifact@v3
-      with:
-        path: 'blog/public'
-
-    - name: Deploy to GitHub Pages
-      id: deployment
-      uses: actions/deploy-pages@v4
-
-    # 11. CRITICAL SPACE CLEANUP
-    - name: Cleanup GitHub Pages Build Assets
-      working-directory: blog
-      run: |
-        echo "Cleaning up public directory to free space..."
-        rm -rf public
-        echo "Cleanup complete. Disk usage after cleanup:"
-        df -h
+      # 4. Deploy
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
