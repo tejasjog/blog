@@ -12,45 +12,41 @@ jobs:
       id-token: write
 
     steps:
-      # 1. Checkout the specific GitLab repository
-      # This clones tejasjog/blog directly into the runner's workspace
-      - name: Checkout GitLab Repository
-        uses: actions/checkout@v4
-        with:
-          repository: 'https://gitlab.com/tejasjog/blog.git'
-          token: ${{ secrets.GITLAB_ACCESS_TOKEN }}
-          fetch-depth: 1
+      # 1. Manually clone from GitLab (actions/checkout only supports GitHub)
+      - name: Clone GitLab Repository
+        env:
+          GL_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
+        run: |
+          # We clone into a folder named 'gitlab-content' to keep things organized
+          git clone --depth 1 "https://oauth2:${GL_TOKEN}@gitlab.com/tejasjog/blog.git" gitlab-content
 
       # 2. Prepare the deployment folder
       - name: Prepare Files
         run: |
           mkdir -p staging
           
-          # Based on your repo path: blog/github.io/index.html
-          # Note: 'actions/checkout' usually places the repo contents at the root.
-          # If the folder 'blog' is part of the repo structure:
-          if [ -f "blog/github.io/index.html" ]; then
-            cp blog/github.io/index.html staging/index.html
-            echo "Successfully found file in blog/github.io/"
-          
-          # If 'github.io' is at the root of the repo:
-          elif [ -f "github.io/index.html" ]; then
-            cp github.io/index.html staging/index.html
-            echo "Successfully found file in github.io/"
-          
+          # Look for the file inside the cloned directory
+          # Checking both potential paths based on your previous logs
+          if [ -f "gitlab-content/blog/github.io/index.html" ]; then
+            cp gitlab-content/blog/github.io/index.html staging/index.html
+            echo "Found file in gitlab-content/blog/github.io/"
+          elif [ -f "gitlab-content/github.io/index.html" ]; then
+            cp gitlab-content/github.io/index.html staging/index.html
+            echo "Found file in gitlab-content/github.io/"
           else
-            echo "ERROR: index.html not found in expected paths!"
-            ls -R
+            echo "ERROR: index.html not found!"
+            echo "Showing directory structure for debugging:"
+            ls -R gitlab-content
             exit 1
           fi
 
-      # 3. Upload to GitHub Pages
+      # 3. Upload the 'staging' folder as the website content
       - name: Upload Artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: 'staging'
 
-      # 4. Deploy
+      # 4. Deploy to GitHub Pages
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
