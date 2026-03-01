@@ -17,7 +17,7 @@ jobs:
       - name: Checkout GitLab Repository
         uses: actions/checkout@v4
         with:
-          repository: 'tejasjog/blog'
+          repository: 'https://gitlab.com/tejasjog/blog.git'
           token: ${{ secrets.GITLAB_ACCESS_TOKEN }}
           fetch-depth: 1
 
