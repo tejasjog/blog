@@ -123,57 +123,38 @@ jobs:
         npm install
         # Install CLIs here. Since Node is set up, this should work.
 
-    # 6. Modify for Cloudflare Widths
-    - name: Modify responsiveImage Shortcode for Cloudflare Widths
+    # 6. Modify Shortcodes for Cloudflare Widths
+    - name: Modify Image Shortcodes for Cloudflare Widths
       working-directory: blog
       run: |
-        SHORTCODE_PATH=$(find . -path "*/shortcodes/responsiveImage.html" -type f | head -n 1)
-        OLD_TEXT='slice 1600'
         NEW_TEXT='${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}'
-
-        echo "vars.CLOUDFLARE_IMAGE_WIDTHS: " ${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}
-        
-        if [ -n "$SHORTCODE_PATH" ]; then
-          echo "Found shortcode at: $SHORTCODE_PATH"
-
-          echo "--- Snippet BEFORE replacement (Cloudflare) ---"
-          # Only print the specific line containing the target text
-          grep "$OLD_TEXT" "$SHORTCODE_PATH" || echo "Text not found."
-
-          # Perform replacement
-          sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$SHORTCODE_PATH"
-          
-          echo "--- Snippet AFTER replacement (Cloudflare) ---"
-          # Only print the line containing the new injected variable
-          grep "${NEW_TEXT}" "$SHORTCODE_PATH"
-        else
-          echo "Warning: responsiveImage.html not found."
-        fi
-
-    # 6.5. Modify for Cloudflare Widths (Carousel)
-    - name: Modify carouselImage Shortcode for Cloudflare Widths
-      working-directory: blog
-      run: |
-        SHORTCODE_PATH=$(find . -path "*/shortcodes/carouselImage.html" -type f | head -n 1)
         OLD_TEXT='slice 1600'
-        NEW_TEXT='${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}'
-
-        echo "vars.CLOUDFLARE_IMAGE_WIDTHS: " ${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}
         
-        if [ -n "$SHORTCODE_PATH" ]; then
-          echo "Found carousel shortcode at: $SHORTCODE_PATH"
+        echo "Target Cloudflare Widths: $NEW_TEXT"
 
-          echo "--- Snippet BEFORE replacement (Carousel) ---"
-          grep "$OLD_TEXT" "$SHORTCODE_PATH" || echo "Text not found."
+        # List of shortcodes to update
+        SHORTCODES=("responsiveImage.html" "carouselImage.html")
 
-          # Perform replacement
-          sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$SHORTCODE_PATH"
+        for FILE_NAME in "${SHORTCODES[@]}"; do
+          # Find the file path dynamically
+          FILE_PATH=$(find . -path "*/shortcodes/$FILE_NAME" -type f | head -n 1)
           
-          echo "--- Snippet AFTER replacement (Carousel) ---"
-          grep "${NEW_TEXT}" "$SHORTCODE_PATH"
-        else
-          echo "Warning: carouselImage.html not found."
-        fi
+          if [ -n "$FILE_PATH" ]; then
+            echo "========================================================"
+            echo "Processing: $FILE_PATH"
+            
+            echo "--- Snippet BEFORE replacement ---"
+            grep "$OLD_TEXT" "$FILE_PATH" || echo "Note: '$OLD_TEXT' not found."
+
+            # Perform the replacement
+            sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$FILE_PATH"
+            
+            echo "--- Snippet AFTER replacement ---"
+            grep "${NEW_TEXT}" "$FILE_PATH"
+          else
+            echo "Warning: $FILE_NAME not found."
+          fi
+        done
         
     - name: Batch Update Image Widths to Cloudflare Settings
       working-directory: blog
