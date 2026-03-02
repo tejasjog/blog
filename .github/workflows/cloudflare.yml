@@ -149,6 +149,31 @@ jobs:
         else
           echo "Warning: responsiveImage.html not found."
         fi
+
+    # 6.5. Modify for Cloudflare Widths (Carousel)
+    - name: Modify carouselImage Shortcode for Cloudflare Widths
+      working-directory: blog
+      run: |
+        SHORTCODE_PATH=$(find . -path "*/shortcodes/carouselImage.html" -type f | head -n 1)
+        OLD_TEXT='slice 1600'
+        NEW_TEXT='${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}'
+
+        echo "vars.CLOUDFLARE_IMAGE_WIDTHS: " ${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}
+        
+        if [ -n "$SHORTCODE_PATH" ]; then
+          echo "Found carousel shortcode at: $SHORTCODE_PATH"
+
+          echo "--- Snippet BEFORE replacement (Carousel) ---"
+          grep "$OLD_TEXT" "$SHORTCODE_PATH" || echo "Text not found."
+
+          # Perform replacement
+          sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$SHORTCODE_PATH"
+          
+          echo "--- Snippet AFTER replacement (Carousel) ---"
+          grep "${NEW_TEXT}" "$SHORTCODE_PATH"
+        else
+          echo "Warning: carouselImage.html not found."
+        fi
         
     - name: Batch Update Image Widths to Cloudflare Settings
       working-directory: blog
