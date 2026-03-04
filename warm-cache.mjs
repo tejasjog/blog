@@ -12,7 +12,6 @@ async function warmUp() {
     const xml = await response.text();
     const sitemap = await parseStringPromise(xml);
     
-    // Support both <urlset><url><loc> and nested sitemaps
     const urls = sitemap.urlset.url.map(u => u.loc[0]);
     console.log(`Found ${urls.length} pages to crawl.`);
 
@@ -21,46 +20,65 @@ async function warmUp() {
       const pageRes = await fetch(url);
       const html = await pageRes.text();
       
-      // Pass the current URL as the 'url' option so JSDOM resolves relative links
       const dom = new JSDOM(html, { url }); 
       const document = dom.window.document;
 
-      const imgElements = Array.from(document.querySelectorAll('img')).map(i => i.src);
-      const linkElements = Array.from(document.querySelectorAll('a')).map(a => a.href);
+      const assets = new Set();
 
-      const allPossibleAssets = [...imgElements, ...linkElements];
+      // 1. Standard src and href
+      document.querySelectorAll('img[src], a[href]').forEach(el => {
+        const link = el.src || el.href;
+        if (link) assets.add(link);
+      });
 
-      const targetUrls = allPossibleAssets.filter(src => {
-        if (!src) return false;
-        
-        // Check if it's one of our target domains
+      // 2. Handle srcset (found in <img> and <source> tags)
+      document.querySelectorAll('[srcset]').forEach(el => {
+        const srcset = el.getAttribute('srcset');
+        if (srcset) {
+          // srcset can have multiple URLs separated by commas
+          srcset.split(',').forEach(entry => {
+            // Each entry looks like "image.jpg 1000w" or "image.jpg 2x"
+            const parts = entry.trim().split(/\s+/);
+            const imageUrl = parts[0]; 
+            if (imageUrl) {
+              try {
+                // Resolve relative URLs against the current page URL
+                const resolvedUrl = new URL(imageUrl, url).href;
+                assets.add(resolvedUrl);
+              } catch (e) {
+                /* Skip invalid URLs */
+              }
+            }
+          });
+        }
+      });
+
+      // 3. Filter for target domains and image extensions
+      const targetUrls = Array.from(assets).filter(src => {
         const isTargetDomain = ALLOWED_DOMAINS.some(domain => src.includes(domain));
-        
-        // Check if it looks like an image file
         const urlClean = src.split('?')[0].toLowerCase();
         const isImageFile = IMAGE_EXTENSIONS.some(ext => urlClean.endsWith(ext));
-        
         return isTargetDomain && isImageFile;
       });
 
-      const uniqueAssets = [...new Set(targetUrls)];
-      
-      if (uniqueAssets.length === 0) {
+      if (targetUrls.length === 0) {
         console.log(`   ⚠️ No matching images found on this page.`);
         continue;
       }
 
-      console.log(`   Found ${uniqueAssets.length} assets. Warming...`);
+      console.log(`   Found ${targetUrls.length} assets. Warming...`);
 
-      await Promise.all(uniqueAssets.map(async (assetUrl) => {
+      // 4. Request each asset
+      await Promise.all(targetUrls.map(async (assetUrl) => {
         try {
           const res = await fetch(assetUrl, { 
             method: 'HEAD',
             headers: { 'User-Agent': 'Github-Action-Cache-Warmer' }
           });
-          console.log(`   ✅ [${res.status}] ${assetUrl.split('/').pop()}`);
+          // Printing the status and the full URL
+          console.log(`   ✅ [${res.status}] ${assetUrl}`);
         } catch (e) {
-          console.log(`   ❌ Failed: ${assetUrl.substring(0, 50)}...`);
+          console.log(`   ❌ Failed: ${assetUrl}`);
         }
       }));
     }
