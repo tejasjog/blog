@@ -24,14 +24,28 @@ async function warmUp() {
       const document = dom.window.document;
 
       const assets = new Set();
-
+      
       // 1. Standard src and href
       document.querySelectorAll('img[src], a[href]').forEach(el => {
         const link = el.src || el.href;
         if (link) assets.add(link);
       });
-
-      // 2. Handle srcset (found in <img> and <source> tags)
+      
+      // 2. Handle background-images in style attributes
+      document.querySelectorAll('[style*="background-image"]').forEach(el => {
+        const style = el.getAttribute('style');
+        // Regex to extract URL from background-image: url('...')
+        const match = style.match(/url\(['"]?([^'"]+)['"]?\)/);
+        if (match && match[1]) {
+          const imageUrl = match[1];
+          try {
+            const resolvedUrl = new URL(imageUrl, url).href;
+            assets.add(resolvedUrl);
+          } catch (e) { /* Skip invalid */ }
+        }
+      });
+      
+      // 3. Handle srcset (found in <img> and <source> tags)
       document.querySelectorAll('[srcset]').forEach(el => {
         const srcset = el.getAttribute('srcset');
         if (srcset) {
