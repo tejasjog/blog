@@ -123,23 +123,27 @@ jobs:
         npm install
         # Install CLIs here. Since Node is set up, this should work.
 
-    # 6. Modify Shortcodes for Cloudflare Widths
-    - name: Modify Image Shortcodes for Cloudflare Widths
+    # 6. Unified Modification for All Image Widths (Shortcodes & Markup)
+    - name: Modify All Image Logic for Cloudflare Widths
       working-directory: blog
       run: |
+        # This should contain your Cloudflare-specific slice, e.g., 'slice 640 1200'
         NEW_TEXT='${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}'
-        OLD_TEXT='slice 1600'
+        # The default slice currently in your local files
+        OLD_TEXT='slice 640 1024 1600 2048 2560'
         
         echo "Target Cloudflare Widths: $NEW_TEXT"
 
-        # List of shortcodes to update
-        SHORTCODES=("responsiveImage.html" "carouselImage.html")
+        # Dynamically find all 4 target files
+        FILES_TO_EDIT=(
+          "$(find . -path "*/shortcodes/responsiveImage.html" -type f | head -n 1)"
+          "$(find . -path "*/shortcodes/carouselImage.html" -type f | head -n 1)"
+          "$(find . -path "*/shortcodes/img.html" -type f | head -n 1)"
+          "$(find . -path "*/_default/_markup/render-image.html" -type f -not -path "./themes/*" | head -n 1)"
+        )
 
-        for FILE_NAME in "${SHORTCODES[@]}"; do
-          # Find the file path dynamically
-          FILE_PATH=$(find . -path "*/shortcodes/$FILE_NAME" -type f | head -n 1)
-          
-          if [ -n "$FILE_PATH" ]; then
+        for FILE_PATH in "${FILES_TO_EDIT[@]}"; do
+          if [ -n "$FILE_PATH" ] && [ -f "$FILE_PATH" ]; then
             echo "========================================================"
             echo "Processing: $FILE_PATH"
             
@@ -152,7 +156,7 @@ jobs:
             echo "--- Snippet AFTER replacement ---"
             grep "${NEW_TEXT}" "$FILE_PATH"
           else
-            echo "Warning: $FILE_NAME not found."
+            echo "Warning: A target file was not found or path is empty."
           fi
         done
         
@@ -170,8 +174,6 @@ jobs:
         # 2. img shortcode
         # 3. cover_image partial
         FILES_TO_EDIT=(
-          "$(find . -path "*/_default/_markup/render-image.html" -type f -not -path "./themes/*" | head -n 1)"
-          "$(find . -path "*/layouts/shortcodes/img.html" -type f | head -n 1)"
           "$(find . -path "*/layouts/partials/cover_image.html" -type f | head -n 1)"
         )
 
