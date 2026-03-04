@@ -196,6 +196,36 @@ jobs:
           fi
         done
 
+    # 6.5. Dynamic Layout Configuration
+    - name: Switch Image Gallery Layouts
+      working-directory: blog
+      run: |
+        LAYOUT_TYPE="${{ vars.CLOUDFLARE_IMAGES_LAYOUT }}"
+        echo "Requested Layout Type: $LAYOUT_TYPE"
+
+        SHORTCODE_DIR="layouts/shortcodes"
+
+        if [ "$LAYOUT_TYPE" = "responsive" ]; then
+          echo "Applying 'responsive' layout configuration..."
+          cp "$SHORTCODE_DIR/responsiveGallery.html" "$SHORTCODE_DIR/gallery.html"
+          cp "$SHORTCODE_DIR/responsiveGallery.html" "$SHORTCODE_DIR/carousel.html"
+          
+          cp "$SHORTCODE_DIR/responsiveImage.html" "$SHORTCODE_DIR/carouselImage.html"
+          cp "$SHORTCODE_DIR/responsiveImage.html" "$SHORTCODE_DIR/img.html"
+
+        elif [ "$LAYOUT_TYPE" = "carousel" ]; then
+          echo "Applying 'carousel' layout configuration..."
+          cp "$SHORTCODE_DIR/carousel.html" "$SHORTCODE_DIR/gallery.html"
+          cp "$SHORTCODE_DIR/carousel.html" "$SHORTCODE_DIR/responsiveGallery.html"
+          
+          cp "$SHORTCODE_DIR/carouselImage.html" "$SHORTCODE_DIR/responsiveImage.html"
+          cp "$SHORTCODE_DIR/carouselImage.html" "$SHORTCODE_DIR/img.html"
+
+        else
+          echo "No layout switch requested (or unknown type). Doing nothing."
+        fi
+
+
     # 6. Modify for Yandex Verification Tag for Cloudflare
     - name: Update Yandex Verification Tag for Cloudflare
       working-directory: blog
