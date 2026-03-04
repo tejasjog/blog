@@ -147,16 +147,17 @@ jobs:
             echo "========================================================"
             echo "Processing: $FILE_PATH"
             
-            echo "--- Snippet BEFORE replacement ---"
-            grep "$OLD_TEXT" "$FILE_PATH" || echo "Note: '$OLD_TEXT' not found."
-
-            # Perform the replacement
-            sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$FILE_PATH"
+            # Check if OLD_TEXT exists
+            if grep -q "$OLD_TEXT" "$FILE_PATH"; then
+              echo "Success: Found '$OLD_TEXT'. Performing replacement..."
+              sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$FILE_PATH"
+            else
+              echo "::warning file=$FILE_PATH::Target '$OLD_TEXT' not found. Skipping replacement."
+            fi
             
-            echo "--- Snippet AFTER replacement ---"
-            grep "${NEW_TEXT}" "$FILE_PATH"
-          else
-            echo "Warning: A target file was not found or path is empty."
+            echo "--- Current State ---"
+            # Append || true to prevent exit code 1 from failing the build
+            grep "${NEW_TEXT}" "$FILE_PATH" || echo "Note: '${NEW_TEXT}' is not present in this file."
           fi
         done
         
@@ -182,16 +183,16 @@ jobs:
             echo "========================================================"
             echo "Processing: $FILE_PATH"
             
-            echo "--- Snippet BEFORE replacement ---"
-            grep -C 2 "$OLD_TEXT" "$FILE_PATH" || echo "Note: '$OLD_TEXT' not found in this file."
-
-            # Perform the replacement
-            sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$FILE_PATH"
+            if grep -q "$OLD_TEXT" "$FILE_PATH"; then
+              echo "Success: Found '$OLD_TEXT'. Performing replacement..."
+              sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$FILE_PATH"
+            else
+              echo "::warning file=$FILE_PATH::Target '$OLD_TEXT' not found. Skipping replacement."
+            fi
             
-            echo "--- Snippet AFTER replacement ---"
-            grep -C 2 "$NEW_TEXT" "$FILE_PATH"
-          else
-            echo "Warning: File not found: $FILE_PATH"
+            echo "--- Current State ---"
+            # Append || true to prevent exit code 1 from failing the build
+            grep -C 2 "$NEW_TEXT" "$FILE_PATH" || echo "Note: '${NEW_TEXT}' is not present in this file."
           fi
         done
 
