@@ -3,7 +3,7 @@ name: "Post-Deploy Cache Warmer"
 on:
   # 1. Triggered when the Cloudflare deployment workflow finishes
   workflow_run:
-    workflows: ["cloudflare"] # Ensure this matches the 'name:' at the top of your cloudflare.yml
+    workflows: ["Deploy to Cloudflare Pages from GitLab - Hugo blog"] # Ensure this matches the 'name:' at the top of your cloudflare.yml
     types:
       - completed
   
