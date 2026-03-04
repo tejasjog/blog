@@ -1,17 +1,25 @@
-
 name: "Post-Deploy Cache Warmer"
 
 on:
+  # 1. Triggered when the Cloudflare deployment workflow finishes
   workflow_run:
-    workflows: ["Deploy"] # MUST match the 'name:' field in your main deployment yml
+    workflows: ["cloudflare"] # Ensure this matches the 'name:' at the top of your cloudflare.yml
     types:
       - completed
+  
+  # 2. Allows you to run this manually from the "Actions" tab in GitHub
+  workflow_dispatch:
+
+# Prevents multiple warming jobs from overlapping
+concurrency:
+  group: cache-warming
+  cancel-in-progress: true
 
 jobs:
   warm:
     runs-on: ubuntu-latest
-    # Only run if the deployment actually succeeded
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # Run if manual OR if the previous workflow succeeded
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     
     steps:
       - name: Checkout Code
