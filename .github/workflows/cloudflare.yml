@@ -233,10 +233,10 @@ jobs:
         
         # Define the target parameters and their corresponding GitHub Vars
         # Use 'true' or 'false' in your GitHub Repository Variables
-        sed -i "s/useImageKitImage: .*/useImageKitImage: ${{ vars.USE_IMAGEKIT || 'false' }}/g" hugo.yaml
-        sed -i "s/useImageKitGallery: .*/useImageKitGallery: ${{ vars.USE_IMAGEKIT || 'false' }}/g" hugo.yaml
-        sed -i "s/useImageKitCarousel: .*/useImageKitCarousel: ${{ vars.USE_IMAGEKIT || 'false' }}/g" hugo.yaml
-        sed -i "s/useImageKitResponsive: .*/useImageKitResponsive: ${{ vars.USE_IMAGEKIT || 'false' }}/g" hugo.yaml
+        sed -i "s/useImageKitImage: .*/useImageKitImage: ${{ vars.CLOUDFLARE_USE_IMAGEKIT || 'false' }}/g" hugo.yaml
+        sed -i "s/useImageKitGallery: .*/useImageKitGallery: ${{ vars.CLOUDFLARE_USE_IMAGEKIT || 'false' }}/g" hugo.yaml
+        sed -i "s/useImageKitCarousel: .*/useImageKitCarousel: ${{ vars.CLOUDFLARE_USE_IMAGEKIT || 'false' }}/g" hugo.yaml
+        sed -i "s/useImageKitResponsive: .*/useImageKitResponsive: ${{ vars.CLOUDFLARE_USE_IMAGEKIT || 'false' }}/g" hugo.yaml
         
         echo "--- hugo.yaml ImageKit Configuration ---"
         grep "useImageKit" hugo.yaml
