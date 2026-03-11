@@ -19,17 +19,27 @@ jobs:
         run: |
           git clone --depth 1 "https://oauth2:${GL_TOKEN}@gitlab.com/tejasjog/blog.git" gitlab-content
 
-      # 2. Prepare the deployment folder using the path verified by logs
-      - name: Prepare Files
+      # 2. Prepare, Substitute, and Stage Files
+      - name: Prepare and Substitute Files
         run: |
           mkdir -p staging
           
-          # Based on your logs, the file is at: gitlab-content/gitlab.io/index.html
+          # Path to source file
           TARGET="gitlab-content/github.io/index.html"
           
           if [ -f "$TARGET" ]; then
+            # Copy to staging first to avoid modifying the git source
             cp "$TARGET" staging/index.html
-            echo "Successfully found and copied index.html"
+            
+            # --- SUBSTITUTION STEP ---
+            # We use '|' as a delimiter because the URL contains '/'
+            OLD_URL="https://tejasjog.github.io/blog/"
+            NEW_URL="${{ vars.CLOUDFLARE_BLOG_URL }}"
+            
+            echo "Substituting $OLD_URL with $NEW_URL"
+            sed -i "s|$OLD_URL|$NEW_URL|g" staging/index.html
+            
+            echo "Successfully substituted and staged index.html"
           else
             echo "ERROR: File $TARGET not found!"
             exit 1
