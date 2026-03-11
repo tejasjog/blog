@@ -260,7 +260,7 @@ jobs:
       run: |
         echo "Running Hugo build. Final disk check before build:"
         df -h
-        hugo --gc --minify --cacheDir /dev/shm/hugo_cache --baseURL ${{ vars.CI_CF_PAGES_URL || 'https://tejasjog-blog.pages.dev' }} --destination public --environment production
+        hugo --gc --minify --cacheDir /dev/shm/hugo_cache --baseURL ${{ vars.CLOUDFLARE_BLOG_URL }} --destination public --environment production
         echo "Hugo build complete. Disk usage after build:"
         du -sh public
         df -h
@@ -440,7 +440,7 @@ jobs:
       with:
         apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        command: pages deploy blog/public --project-name=tejasjog-blog --branch=master 
+        command: pages deploy blog/public --project-name=${{ vars.CLOUDFLARE_PROJECT_NAME }} --branch=master 
 
     # 11. CRITICAL SPACE CLEANUP
     - name: Cleanup Cloudflare Build Assets
