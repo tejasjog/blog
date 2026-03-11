@@ -10,27 +10,36 @@ jobs:
       contents: read
 
     steps:
-      # 1. Clone the GitLab repository (Directly, bypassing actions/checkout limitations)
+      # 1. Clone the GitLab repository
       - name: Clone GitLab Repository
         env:
           GL_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
         run: |
           git clone --depth 1 "https://oauth2:${GL_TOKEN}@gitlab.com/tejasjog/blog.git" gitlab-content
 
-      # 2. Prepare the deployment folder
-      - name: Prepare Files
+      # 2. Prepare and Substitute Files
+      - name: Prepare and Substitute Files
         run: |
           mkdir -p staging
           
-          # Path verified from your structure: gitlab-content/netlify.app/index.html
+          # Path based on your repository structure
           TARGET="gitlab-content/netlify.app/index.html"
           
           if [ -f "$TARGET" ]; then
+            # Copy to staging
             cp "$TARGET" staging/index.html
-            echo "Successfully found and copied index.html for Netlify"
+            
+            # --- SUBSTITUTION STEP ---
+            # Replaces the Netlify URL with the Cloudflare variable
+            OLD_URL="https://tejasjog-blog.netlify.app/"
+            NEW_URL="${{ vars.CLOUDFLARE_BLOG_URL }}"
+            
+            echo "Substituting $OLD_URL with $NEW_URL"
+            sed -i "s|$OLD_URL|$NEW_URL|g" staging/index.html
+            
+            echo "Successfully substituted and staged index.html"
           else
             echo "ERROR: File $TARGET not found!"
-            echo "Current structure for debugging:"
             ls -R gitlab-content
             exit 1
           fi
@@ -40,7 +49,6 @@ jobs:
         run: npm install -g netlify-cli
 
       # 4. Deploy to Netlify
-      # Using the 'staging' folder as the source directory
       - name: Netlify Deployment
         run: |
           netlify deploy --prod --dir staging --site ${{ secrets.NETLIFY_SITE_ID }}
