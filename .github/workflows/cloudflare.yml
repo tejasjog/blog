@@ -84,29 +84,36 @@ jobs:
         echo "Total files in repository (excluding .git):"
         find . -path ./.git -prune -o -type f -print | wc -l
 
-  # 2.5. Conditional Submodule Pruning
+    # 2.5. Conditional Submodule Pruning
     - name: Prune Submodules (Keep only 2007 and 2013)
-      if: env.KEEP_ONLY_SELECTED_YEARS == 'true'
       working-directory: blog
       run: |
-        echo "Pruning content to keep only 2007 and 2013 submodules..."
+        echo "========================================================"
+        echo "KEEP_ONLY_SELECTED_YEARS: ${{ vars.KEEP_ONLY_SELECTED_YEARS || 'false' }}"
+        echo "========================================================"
         
-        # Define the directory where your year-based submodules are located
-        # Adjust this path if your submodules are in a different folder
-        TARGET_DIR="content/posts" 
-        
-        if [ -d "$TARGET_DIR" ]; then
-          cd "$TARGET_DIR"
-          # Find all directories, then filter out 2007 and 2013, then remove them
-          # This protects the current directory (.) and the targets
-          find . -maxdepth 1 -type d ! -name "." ! -name "2007" ! -name "2013" -exec rm -rf {} +
+        # Only proceed if the variable is explicitly set to 'true'
+        if [ "${{ vars.KEEP_ONLY_SELECTED_YEARS }}" = "true" ]; then
+          echo "Pruning content to keep only 2007 and 2013 submodules..."
           
-          echo "Remaining directories in $TARGET_DIR:"
-          ls -F
+          # Target the directory where your year-based submodules are located
+          TARGET_DIR="content/posts" 
+          
+          if [ -d "$TARGET_DIR" ]; then
+            cd "$TARGET_DIR"
+            # Find all directories, then filter out current directory (.), 2007, and 2013
+            # Everything else is removed to speed up the Hugo build.
+            find . -maxdepth 1 -type d ! -name "." ! -name "2007" ! -name "2013" -exec rm -rf {} +
+            
+            echo "Remaining directories in $TARGET_DIR:"
+            ls -F
+          else
+            echo "::warning::Target directory $TARGET_DIR not found. Skipping pruning."
+          fi
         else
-          echo "::warning::Target directory $TARGET_DIR not found. Skipping pruning."
+          echo "Pruning skipped. All years will be included in the build."
         fi
-
+        
     # 3. Optimized Node.js Setup
     - name: Set up Node.js Environment
       uses: actions/setup-node@v4
