@@ -440,7 +440,7 @@ jobs:
       with:
         apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        command: pages deploy blog/public --project-name=tejasjog --branch=master 
+        command: pages deploy blog/public --project-name=tejasjog-blog --branch=master 
 
     # 11. CRITICAL SPACE CLEANUP
     - name: Cleanup Cloudflare Build Assets
