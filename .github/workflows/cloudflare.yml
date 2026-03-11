@@ -94,16 +94,16 @@ jobs:
         
         # Only proceed if the variable is explicitly set to 'true'
         if [ "${{ vars.KEEP_ONLY_SELECTED_YEARS }}" = "true" ]; then
-          echo "Pruning content to keep only 2007 and 2013 submodules..."
+          echo "Pruning content to keep only 2017 and 2013 submodules..."
           
           # Target the directory where your year-based submodules are located
           TARGET_DIR="content/posts" 
           
           if [ -d "$TARGET_DIR" ]; then
             cd "$TARGET_DIR"
-            # Find all directories, then filter out current directory (.), 2007, and 2013
+            # Find all directories, then filter out current directory (.), 2017, and 2013
             # Everything else is removed to speed up the Hugo build.
-            find . -maxdepth 1 -type d ! -name "." ! -name "2007" ! -name "2013" -exec rm -rf {} +
+            find . -maxdepth 1 -type d ! -name "." ! -name "2017" ! -name "2013" -exec rm -rf {} +
             
             echo "Remaining directories in $TARGET_DIR:"
             ls -F
