@@ -17,20 +17,16 @@ jobs:
         run: |
           git clone --depth 1 "https://oauth2:${GL_TOKEN}@gitlab.com/tejasjog/blog.git" gitlab-content
 
-      # 2. Prepare and Substitute Files
+      # 2. Prepare, Substitute, and Stage Files
       - name: Prepare and Substitute Files
         run: |
           mkdir -p staging
-          
-          # Path based on your repository structure
           TARGET="gitlab-content/netlify.app/index.html"
           
           if [ -f "$TARGET" ]; then
-            # Copy to staging
             cp "$TARGET" staging/index.html
             
-            # --- SUBSTITUTION STEP ---
-            # Replaces the Netlify URL with the Cloudflare variable
+            # Substitutions
             OLD_URL="https://tejasjog-blog.netlify.app/"
             NEW_URL="${{ vars.CLOUDFLARE_BLOG_URL }}"
             
@@ -51,6 +47,7 @@ jobs:
       # 4. Deploy to Netlify
       - name: Netlify Deployment
         run: |
-          netlify deploy --prod --dir staging --site ${{ secrets.NETLIFY_SITE_ID }}
+          # Use --site flag with the Site ID directly
+          netlify deploy --prod --dir staging --site "${{ secrets.NETLIFY_SITE_ID }}"
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ACCESS_TOKEN }}
