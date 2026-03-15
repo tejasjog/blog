@@ -16,7 +16,8 @@ jobs:
     env:
       DART_SASS_VERSION: 1.97.3
       HUGO_VERSION: 0.155.3
-      NODE_VERSION: 20
+      NODE_VERSION: 24
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
     - name: Free Disk Space (Ubuntu)
