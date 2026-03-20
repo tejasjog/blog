@@ -308,69 +308,38 @@ jobs:
     - name: Cleanup .droplist Files and Report Deletions
       working-directory: blog
       run: |
-        echo "========================================================"
-        echo "SEARCHING FOR .DROPLIST FILES"
-        echo "========================================================"
-        DROPLIST_FILES=$(find . -name "*.droplist")
+        echo "Searching for and processing .droplist files..."
+        DROPLISTS=$(find public -name "*.droplist")
         
-        if [ -z "$DROPLIST_FILES" ]; then
-          echo "No .droplist files found."
-        else
-          for DROPLIST_FILE in $DROPLIST_FILES; do
-            echo "--------------------------------------------------------"
-            echo "Processing droplist: $DROPLIST_FILE"
-            
-            # 1. Get the directory containing the droplist
-            # Example: ./content/posts/2025/09/19
-            # Example: ./public/posts/2025/09/19
-            BASE_DIR=$(dirname "$DROPLIST_FILE")
-            
-            while IFS= read -r ENTRY || [ -n "$ENTRY" ]; do
-              if [ -z "$ENTRY" ]; then continue; fi
-              
-              # 2. Handle entries that might have subfolders (e.g., images/photo.jpg)
-              # Split into folder and filename
-              FILE_NAME=$(basename "$ENTRY")
-              SUB_DIR=$(dirname "$ENTRY")
-              if [ "$SUB_DIR" = "." ]; then SUB_DIR=""; else SUB_DIR="/$SUB_DIR"; fi
-
-              # 3. Calculate Case Variations for the filename
-              base="${FILE_NAME%.*}"
-              ext="${FILE_NAME##*.}"
-              base_l=$(echo "$base" | tr '[:upper:]' '[:lower:]')
-              base_u=$(echo "$base" | tr '[:lower:]' '[:upper:]')
-              ext_l=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
-              ext_u=$(echo "$ext" | tr '[:lower:]' '[:upper:]')
-
-              VAR_NAMES=(
-                "$FILE_NAME"
-                "${base_l}.${ext_l}"
-                "${base_u}.${ext_u}"
-                "${base_u}.${ext_l}"
-                "${base_l}.${ext_u}"
-              )
-
-              DELETED_ANY=false
-              for name in $(printf "%s\n" "${VAR_NAMES[@]}" | sort -u); do
-                # Construct the path using the directory where the droplist was found
-                # This works regardless of whether the droplist is in 'content' or 'public'
-                TARGET_PATH="${BASE_DIR}${SUB_DIR}/${name}"
-                
-                if [ -f "$TARGET_PATH" ]; then
-                  rm "$TARGET_PATH"
-                  echo "[DELETED] $TARGET_PATH"
-                  DELETED_ANY=true
-                fi
-              done
-
-              if [ "$DELETED_ANY" = false ]; then
-                echo "[NOT FOUND] $ENTRY (checked all variants in ${BASE_DIR}${SUB_DIR})"
-              fi
-            done < "$DROPLIST_FILE"
-            
-            rm "$DROPLIST_FILE"
-          done
+        if [ -z "$DROPLISTS" ]; then
+          echo "No .droplist files found. Skipping cleanup."
+          exit 0
         fi
+
+        for LIST in $DROPLISTS; do
+          DIR=$(dirname "$LIST")
+          echo "--------------------------------------------------------"
+          echo "Processing droplist: $LIST"
+          
+          while IFS= read -r ENTRY || [ -n "$ENTRY" ]; do
+            # Skip empty lines and comments
+            [[ -z "$ENTRY" || "$ENTRY" =~ ^# ]] && continue
+            
+            # Use 'find' with '-iname' for a true case-insensitive search
+            # This handles cases like .jpg vs .JPG correctly
+            MATCHING_FILE=$(find "$DIR" -maxdepth 2 -iname "$ENTRY" -type f | head -n 1)
+
+            if [ -n "$MATCHING_FILE" ] && [ -f "$MATCHING_FILE" ]; then
+              rm "$MATCHING_FILE"
+              echo "[DELETED] $MATCHING_FILE"
+            else
+              echo "[NOT FOUND] $ENTRY (checked all variants in $DIR)"
+            fi
+          done < "$LIST"
+          
+          # Remove the droplist file itself after processing
+          rm "$LIST"
+        done
 
     # 8.3. Cleanup photos folders in the public directory
     - name: Cleanup photos folders in the public directory
