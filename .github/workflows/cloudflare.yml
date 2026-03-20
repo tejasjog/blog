@@ -372,31 +372,37 @@ jobs:
           done
         fi
 
-    # 8.3. Cleanup Photos Folders parallel to index.md
-    - name: Cleanup Photos Folders Parallel to index.md
+    # 8.3. Cleanup photos folders in the public directory
+    - name: Cleanup photos folders in the public directory
       run: |
-        echo "Searching for 'photos' folders adjacent to 'index.md' files..."
+        echo "Searching for 'photos' folders in public/ that were copied from page bundles..."
         
-        # Change 'blog/content' to the actual path of your Hugo content folder
-        CONTENT_DIR="blog/content"
+        # Target the public directory where Hugo outputs the site
+        PUBLIC_DIR="blog/public"
         
-        # Find all index.md files and look for a 'photos' folder in the same directory
-        find "$CONTENT_DIR" -name "index.md" | while read -r index_file; do
-          parent_dir=$(dirname "$index_file")
+        if [ ! -d "$PUBLIC_DIR" ]; then
+          echo "Error: $PUBLIC_DIR not found. Ensure this runs AFTER the Hugo build step."
+          exit 1
+        fi
+
+        # Find all index.html files (which Hugo creates from index.md) 
+        # and look for a 'photos' folder in the same output directory.
+        find "$PUBLIC_DIR" -name "index.html" | while read -r html_file; do
+          parent_dir=$(dirname "$html_file")
           photos_dir="$parent_dir/photos"
           
           if [ -d "$photos_dir" ]; then
             echo "------------------------------------------------"
-            echo "FOUND TARGET FOLDER: $photos_dir"
-            echo "DELETING FILES:"
+            echo "LOCATION: $photos_dir"
+            echo "ACTION: Deleting folder and all internal files..."
             
-            # List every file being deleted for the log
-            find "$photos_dir" -type f -print
+            # List files for the deployment log
+            find "$photos_dir" -type f -printf "DELETING: %p\n"
             
-            # Remove the directory and all contents
+            # Remove the directory
             rm -rf "$photos_dir"
             
-            echo "SUCCESS: Deleted folder and all contents at $photos_dir"
+            echo "SUCCESS: $photos_dir has been removed from deployment."
           fi
         done
         
