@@ -371,6 +371,34 @@ jobs:
             rm "$DROPLIST_FILE"
           done
         fi
+
+    # 8.3. Cleanup Photos Folders parallel to index.md
+    - name: Cleanup Photos Folders Parallel to index.md
+      run: |
+        echo "Searching for 'photos' folders adjacent to 'index.md' files..."
+        
+        # Change 'blog/content' to the actual path of your Hugo content folder
+        CONTENT_DIR="blog/content"
+        
+        # Find all index.md files and look for a 'photos' folder in the same directory
+        find "$CONTENT_DIR" -name "index.md" | while read -r index_file; do
+          parent_dir=$(dirname "$index_file")
+          photos_dir="$parent_dir/photos"
+          
+          if [ -d "$photos_dir" ]; then
+            echo "------------------------------------------------"
+            echo "FOUND TARGET FOLDER: $photos_dir"
+            echo "DELETING FILES:"
+            
+            # List every file being deleted for the log
+            find "$photos_dir" -type f -print
+            
+            # Remove the directory and all contents
+            rm -rf "$photos_dir"
+            
+            echo "SUCCESS: Deleted folder and all contents at $photos_dir"
+          fi
+        done
         
     # 8.6. Legacy Format Audit
     - name: Audit for Legacy JPG/JPEG Files in Public
