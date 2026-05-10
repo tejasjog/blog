@@ -304,43 +304,52 @@ jobs:
         # If you have a themes folder with its own .git, remove those too
         find . -name ".git" -type d -exec rm -rf {} +
   
-    # 8. Cleanup .droplist Files (Source & Public) - Recursive Path Fix
+  # 8. Cleanup .droplist Files (Source & Public) - Improved Path Handling
     - name: Cleanup .droplist Files and Report Deletions
       working-directory: blog
       run: |
         echo "Searching for and processing .droplist files..."
-        DROPLISTS=$(find public -name "*.droplist")
         
-        if [ -z "$DROPLISTS" ]; then
-          echo "No .droplist files found. Skipping cleanup."
-          exit 0
-        fi
-
-        for LIST in $DROPLISTS; do
+        # Using a robust loop to handle potential spaces in filenames
+        find public -name "*.droplist" -print0 | while IFS= read -r -d '' LIST; do
           DIR=$(dirname "$LIST")
           echo "--------------------------------------------------------"
           echo "Processing droplist: $LIST"
           
           while IFS= read -r ENTRY || [ -n "$ENTRY" ]; do
-            # Skip empty lines and comments
+            # Trim whitespace and skip empty lines/comments
+            ENTRY=$(echo "$ENTRY" | xargs)
             [[ -z "$ENTRY" || "$ENTRY" =~ ^# ]] && continue
             
-            # Use 'find' with '-iname' for a true case-insensitive search
-            # This handles cases like .jpg vs .JPG correctly
-            MATCHING_FILE=$(find "$DIR" -maxdepth 2 -iname "$ENTRY" -type f | head -n 1)
+            # Construct the full relative path. 
+            # If DIR is 'public/posts/x' and ENTRY is 'images/y.jpg', 
+            # TARGET_PATH becomes 'public/posts/x/images/y.jpg'
+            TARGET_PATH="$DIR/$ENTRY"
+            
+            # Use -ipath to match the full path case-insensitively
+            MATCHING_FILE=$(find "$DIR" -ipath "$TARGET_PATH" -type f | head -n 1)
 
             if [ -n "$MATCHING_FILE" ] && [ -f "$MATCHING_FILE" ]; then
               rm "$MATCHING_FILE"
               echo "[DELETED] $MATCHING_FILE"
             else
-              echo "[NOT FOUND] $ENTRY (checked all variants in $DIR)"
+              # Fallback: if the specific path fails, try matching just the filename 
+              # inside that directory as a safety measure.
+              BASENAME=$(basename "$ENTRY")
+              FALLBACK_FILE=$(find "$DIR" -iname "$BASENAME" -type f | head -n 1)
+              
+              if [ -n "$FALLBACK_FILE" ] && [ -f "$FALLBACK_FILE" ]; then
+                rm "$FALLBACK_FILE"
+                echo "[DELETED] $FALLBACK_FILE (matched via basename fallback)"
+              else
+                echo "[NOT FOUND] $ENTRY (looked for: $TARGET_PATH)"
+              fi
             fi
           done < "$LIST"
           
           # Remove the droplist file itself after processing
           rm "$LIST"
         done
-
     # 8.3. Cleanup photos folders in the public directory
     - name: Cleanup photos folders in the public directory
       run: |
