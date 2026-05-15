@@ -1,53 +1,497 @@
-name: Deploy Single File from GitLab to Netlify
+name: Deploy to Netlify Pages from GitLab - Hugo blog 
 
 on:
   workflow_dispatch:
 
 jobs:
   deploy:
+    # IMPORTANT: Consider using 'ubuntu-20.04' instead of 'ubuntu-latest'
+    # if 'ubuntu-latest' (currently 24.04) has less disk space on your self-hosted runner.
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      pages: write
+      id-token: write # Required for deploy-pages action
+
+    env:
+      DART_SASS_VERSION: 1.97.3
+      HUGO_VERSION: 0.155.3
+      NODE_VERSION: 24
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
-      # 1. Clone the GitLab repository
-      - name: Clone GitLab Repository
-        env:
-          GL_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
-        run: |
-          git clone --depth 1 "https://oauth2:${GL_TOKEN}@gitlab.com/tejasjog/blog.git" gitlab-content
+    - name: Free Disk Space (Ubuntu)
+      uses: jlumbroso/free-disk-space@main
+      with:
+        # This removes large pre-installed tools to free up ~30GB+
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
+        docker-images: true
+        swap-storage: true
+    # 0. CRITICAL: EARLY SYSTEM CLEANUP
+    # This step is designed to aggressively free up space before any installation or cloning.
+    - name: Aggressive Runner System Cleanup
+      run: |
+        echo "Starting aggressive system cleanup..."
+        # 1. Clean apt package cache
+        sudo apt-get autoremove -y
+        sudo apt-get clean
 
-      # 2. Prepare, Substitute, and Stage Files
-      - name: Prepare and Substitute Files
-        run: |
-          mkdir -p staging
-          TARGET="gitlab-content/netlify.app/index.html"
+        # 2. Remove common large tools/caches not needed for this workflow (e.g., Azure, Docker images)
+        # Check if these directories exist before trying to remove them.
+        echo "Removing large tool caches and unnecessary packages..."
+
+        # Docker images can be huge; removing them is often the biggest win
+        if command -v docker &> /dev/null; then
+          sudo docker system prune --all --force
+        fi
+
+        # Remove large .NET and Android SDK packages
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+
+        # Print disk usage after initial cleanup
+        echo "Disk usage after aggressive cleanup:"
+        df -h
+
+    - name: Nuclear Disk Cleanup
+      run: |
+        sudo docker image prune --all --force
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/powershell /usr/share/swift
+        # Clean up apt completely
+        sudo apt-get clean
+        sudo rm -rf /var/lib/apt/lists/*
+        
+    # 1. Checkout Code from GitLab
+    - name: Checkout Code with Submodule Authentication
+      env:
+        GIT_OAUTH_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
+      run: |
+        git config --global url."https://oauth2:$GIT_OAUTH_TOKEN@gitlab.com".insteadOf "https://gitlab.com"
+        git clone --depth 1 https://gitlab.com/tejasjog/blog.git
+        cd blog
+
+    # 2. Run Submodule Update and Cleanup .git files
+    - name: Update Submodules and Cleanup Content Directories
+      working-directory: blog
+      run: |
+        echo "Attempting to update submodules..."
+        git submodule update --init --force --recursive --remote --verbose --depth 1
+
+        echo "Total files in repository (excluding .git):"
+        find . -path ./.git -prune -o -type f -print | wc -l
+
+    # 2.5. Conditional Submodule Pruning
+    - name: Prune Submodules (Keep only 2007 and 2013)
+      working-directory: blog
+      run: |
+        echo "========================================================"
+        echo "KEEP_ONLY_SELECTED_YEARS: ${{ vars.KEEP_ONLY_SELECTED_YEARS || 'false' }}"
+        echo "========================================================"
+        
+        # Only proceed if the variable is explicitly set to 'true'
+        if [ "${{ vars.KEEP_ONLY_SELECTED_YEARS }}" = "true" ]; then
+          echo "Pruning content to keep only 2017 and 2013 submodules..."
           
-          if [ -f "$TARGET" ]; then
-            cp "$TARGET" staging/index.html
+          # Target the directory where your year-based submodules are located
+          TARGET_DIR="content/posts" 
+          
+          if [ -d "$TARGET_DIR" ]; then
+            cd "$TARGET_DIR"
+            # Find all directories, then filter out current directory (.), 2017, and 2013
+            # Everything else is removed to speed up the Hugo build.
+            find . -maxdepth 1 -type d ! -name "." ! -name "2017" ! -name "2013" -exec rm -rf {} +
             
-            # Substitutions
-            OLD_URL="https://tejasjog-blog.netlify.app/"
-            NEW_URL="${{ vars.CLOUDFLARE_BLOG_URL }}"
-            
-            echo "Substituting $OLD_URL with $NEW_URL"
-            sed -i "s|$OLD_URL|$NEW_URL|g" staging/index.html
-            
-            echo "Successfully substituted and staged index.html"
+            echo "Remaining directories in $TARGET_DIR:"
+            ls -F
           else
-            echo "ERROR: File $TARGET not found!"
-            ls -R gitlab-content
-            exit 1
+            echo "::warning::Target directory $TARGET_DIR not found. Skipping pruning."
           fi
+        else
+          echo "Pruning skipped. All years will be included in the build."
+        fi
+        
+    # 3. Optimized Node.js Setup
+    - name: Set up Node.js Environment
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
 
-      # 3. Install Netlify CLI
-      - name: Install Netlify CLI
-        run: npm install -g netlify-cli
+    # 4. Install Brotli, Dart Sass, and Hugo (Manual install with immediate cleanup)
+    - name: Install Dependencies with Cleanup
+      run: |
+        echo "Installing system dependencies: brotli, Dart Sass, and Hugo..."
+        sudo apt-get update
+        sudo apt-get install -y brotli
 
-      # 4. Deploy to Netlify
-      - name: Netlify Deployment
-        run: |
-          # Use --site flag with the Site ID directly
-          netlify deploy --prod --dir staging --site "${{ secrets.NETLIFY_SITE_ID }}"
-        env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ACCESS_TOKEN }}
+        # Install Dart Sass
+        DART_SASS_FILENAME="dart-sass-${{ env.DART_SASS_VERSION }}-linux-x64.tar.gz"
+        curl -LJO https://github.com/sass/dart-sass/releases/download/${{ env.DART_SASS_VERSION }}/$DART_SASS_FILENAME
+        tar -xf $DART_SASS_FILENAME
+        sudo cp -r dart-sass/* /usr/local/bin/
+        rm -rf dart-sass* # CRITICAL CLEANUP 1
+
+        # Install Hugo
+        HUGO_DEB_FILENAME="hugo_extended_${{ env.HUGO_VERSION }}_linux-amd64.deb"
+        sudo curl -LJO https://github.com/gohugoio/hugo/releases/download/v${{ env.HUGO_VERSION }}/$HUGO_DEB_FILENAME
+        sudo apt-get install -y ./$HUGO_DEB_FILENAME
+        sudo rm $HUGO_DEB_FILENAME # CRITICAL CLEANUP 2
+
+        # FINAL PACKAGE CLEANUP
+        sudo apt-get autoremove -y
+        sudo apt-get clean
+        echo "Dependencies installed. Disk usage check before npm install:"
+        df -h
+
+    # 5. Install Node Dependencies and Global CLIs
+    - name: Install Node Dependencies and Global CLIs
+      working-directory: blog
+      run: |
+        npm install
+        # Install CLIs here. Since Node is set up, this should work.
+
+    # 6. Unified Modification for All Image Widths (Shortcodes & Markup)
+    - name: Modify All Image Logic for Netlify Widths
+      working-directory: blog
+      run: |
+        # This should contain your Netlify-specific slice, e.g., 'slice 640 1200'
+        NEW_TEXT='${{ vars.NETLIFY_IMAGE_WIDTHS }}'
+        # The default slice currently in your local files
+        OLD_TEXT='slice 640 1024 1600 2048 2560'
+        
+        echo "Target Netlify Widths: $NEW_TEXT"
+
+        # Dynamically find all 4 target files
+        FILES_TO_EDIT=(
+          "$(find . -path "*/shortcodes/responsiveImage.html" -type f | head -n 1)"
+          "$(find . -path "*/shortcodes/carouselImage.html" -type f | head -n 1)"
+          "$(find . -path "*/shortcodes/img.html" -type f | head -n 1)"
+          "$(find . -path "*/_default/_markup/render-image.html" -type f -not -path "./themes/*" | head -n 1)"
+        )
+
+        for FILE_PATH in "${FILES_TO_EDIT[@]}"; do
+          if [ -n "$FILE_PATH" ] && [ -f "$FILE_PATH" ]; then
+            echo "========================================================"
+            echo "Processing: $FILE_PATH"
+            
+            # Check if OLD_TEXT exists
+            if grep -q "$OLD_TEXT" "$FILE_PATH"; then
+              echo "Success: Found '$OLD_TEXT'. Performing replacement..."
+              sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$FILE_PATH"
+            else
+              echo "::warning file=$FILE_PATH::Target '$OLD_TEXT' not found. Skipping replacement."
+            fi
+            
+            echo "--- Current State ---"
+            # Append || true to prevent exit code 1 from failing the build
+            grep "${NEW_TEXT}" "$FILE_PATH" || echo "Note: '${NEW_TEXT}' is not present in this file."
+          fi
+        done
+        
+    - name: Batch Update Image Widths to Netlify Settings
+      working-directory: blog
+      run: |
+        # Define the target variable from GitHub Vars
+        NEW_TEXT='${{ vars.NETLIFY_IMAGE_WIDTHS_IMG }}'
+        OLD_TEXT='1600'
+        
+        echo "Target Netlify Widths: $NEW_TEXT"
+
+        # Define the list of files to process
+        # 1. render-image markup
+        # 2. img shortcode
+        # 3. cover_image partial
+        FILES_TO_EDIT=(
+          "$(find . -path "*/layouts/partials/cover_image.html" -type f | head -n 1)"
+        )
+
+        for FILE_PATH in "${FILES_TO_EDIT[@]}"; do
+          if [ -f "$FILE_PATH" ]; then
+            echo "========================================================"
+            echo "Processing: $FILE_PATH"
+            
+            if grep -q "$OLD_TEXT" "$FILE_PATH"; then
+              echo "Success: Found '$OLD_TEXT'. Performing replacement..."
+              sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$FILE_PATH"
+            else
+              echo "::warning file=$FILE_PATH::Target '$OLD_TEXT' not found. Skipping replacement."
+            fi
+            
+            echo "--- Current State ---"
+            # Append || true to prevent exit code 1 from failing the build
+            grep -C 2 "$NEW_TEXT" "$FILE_PATH" || echo "Note: '${NEW_TEXT}' is not present in this file."
+          fi
+        done
+
+    # 6.5. Dynamic Layout Configuration
+    - name: Switch Image Gallery Layouts
+      working-directory: blog
+      run: |
+        LAYOUT_TYPE="${{ vars.NETLIFY_IMAGES_LAYOUT }}"
+        echo "Requested Layout Type: $LAYOUT_TYPE"
+
+        SHORTCODE_DIR="layouts/shortcodes"
+
+        if [ "$LAYOUT_TYPE" = "responsive" ]; then
+          echo "Applying 'responsive' layout configuration..."
+          cp "$SHORTCODE_DIR/responsiveGallery.html" "$SHORTCODE_DIR/gallery.html"
+          cp "$SHORTCODE_DIR/responsiveGallery.html" "$SHORTCODE_DIR/carousel.html"
+          
+          cp "$SHORTCODE_DIR/responsiveImage.html" "$SHORTCODE_DIR/carouselImage.html"
+          cp "$SHORTCODE_DIR/responsiveImage.html" "$SHORTCODE_DIR/img.html"
+
+        elif [ "$LAYOUT_TYPE" = "carousel" ]; then
+          echo "Applying 'carousel' layout configuration..."
+          cp "$SHORTCODE_DIR/carousel.html" "$SHORTCODE_DIR/gallery.html"
+          cp "$SHORTCODE_DIR/carousel.html" "$SHORTCODE_DIR/responsiveGallery.html"
+          
+          cp "$SHORTCODE_DIR/carouselImage.html" "$SHORTCODE_DIR/responsiveImage.html"
+          cp "$SHORTCODE_DIR/carouselImage.html" "$SHORTCODE_DIR/img.html"
+
+        else
+          echo "No layout switch requested (or unknown type). Doing nothing."
+        fi
+
+    # 6.7. Configure ImageKit Parameters for Netlify
+    - name: Configure ImageKit Parameters in hugo.yaml
+      working-directory: blog
+      run: |
+        echo "Updating ImageKit parameters in hugo.yaml based on environment variables..."
+        
+        # Define the target parameters and their corresponding GitHub Vars
+        # Use 'true' or 'false' in your GitHub Repository Variables
+        sed -i "s/useImageKitImage: .*/useImageKitImage: ${{ vars.NETLIFY_USE_IMAGEKIT || 'false' }}/g" hugo.yaml
+        sed -i "s/useImageKitGallery: .*/useImageKitGallery: ${{ vars.NETLIFY_USE_IMAGEKIT || 'false' }}/g" hugo.yaml
+        sed -i "s/useImageKitCarousel: .*/useImageKitCarousel: ${{ vars.NETLIFY_USE_IMAGEKIT || 'false' }}/g" hugo.yaml
+        sed -i "s/useImageKitResponsive: .*/useImageKitResponsive: ${{ vars.NETLIFY_USE_IMAGEKIT || 'false' }}/g" hugo.yaml
+        
+        echo "--- hugo.yaml ImageKit Configuration ---"
+        grep "useImageKit" hugo.yaml
+        
+    # 6. Modify for Yandex Verification Tag for Netlify
+    - name: Update Yandex Verification Tag for Netlify
+      working-directory: blog
+      run: |
+        echo "--- Verification tag BEFORE replacement ---"
+        grep "SiteVerificationTag: yandex-SiteVerificationTag" hugo.yaml || echo "Tag not found!"
+
+        echo "Updating Yandex SiteVerificationTag for Netlify..."
+        sed -i "s/SiteVerificationTag: yandex-SiteVerificationTag/SiteVerificationTag: ${{ vars.NETLIFY_YANDEX_SITEVERIFICATIONTAG }}/g" hugo.yaml
+        
+        echo "--- Verification tag AFTER replacement ---"
+        grep "SiteVerificationTag" hugo.yaml
+
+    # 7. Build Hugo Site (First Build - Where it was failing)
+    - name: Build Hugo Site (for Netlify)
+      working-directory: blog
+      run: |
+        echo "Running Hugo build. Final disk check before build:"
+        df -h
+        hugo --gc --minify --cacheDir /dev/shm/hugo_cache --baseURL ${{ vars.NETLIFY_BLOG_URL }} --destination public --environment production
+        echo "Hugo build complete. Disk usage after build:"
+        du -sh public
+        df -h
+
+    - name: Prune for Upload
+      working-directory: blog
+      run: |
+        rm -rf node_modules
+        rm -rf .git
+        # If you have a themes folder with its own .git, remove those too
+        find . -name ".git" -type d -exec rm -rf {} +
+  
+  # 8. Cleanup .droplist Files (Source & Public) - Improved Path Handling
+    - name: Cleanup .droplist Files and Report Deletions
+      working-directory: blog
+      run: |
+        echo "Searching for and processing .droplist files..."
+        
+        # Using a robust loop to handle potential spaces in filenames
+        find public -name "*.droplist" -print0 | while IFS= read -r -d '' LIST; do
+          DIR=$(dirname "$LIST")
+          echo "--------------------------------------------------------"
+          echo "Processing droplist: $LIST"
+          
+          while IFS= read -r ENTRY || [ -n "$ENTRY" ]; do
+            # Trim whitespace and skip empty lines/comments
+            ENTRY=$(echo "$ENTRY" | xargs)
+            [[ -z "$ENTRY" || "$ENTRY" =~ ^# ]] && continue
+            
+            # Construct the full relative path. 
+            # If DIR is 'public/posts/x' and ENTRY is 'images/y.jpg', 
+            # TARGET_PATH becomes 'public/posts/x/images/y.jpg'
+            TARGET_PATH="$DIR/$ENTRY"
+            
+            # Use -ipath to match the full path case-insensitively
+            MATCHING_FILE=$(find "$DIR" -ipath "$TARGET_PATH" -type f | head -n 1)
+
+            if [ -n "$MATCHING_FILE" ] && [ -f "$MATCHING_FILE" ]; then
+              rm "$MATCHING_FILE"
+              echo "[DELETED] $MATCHING_FILE"
+            else
+              # Fallback: if the specific path fails, try matching just the filename 
+              # inside that directory as a safety measure.
+              BASENAME=$(basename "$ENTRY")
+              FALLBACK_FILE=$(find "$DIR" -iname "$BASENAME" -type f | head -n 1)
+              
+              if [ -n "$FALLBACK_FILE" ] && [ -f "$FALLBACK_FILE" ]; then
+                rm "$FALLBACK_FILE"
+                echo "[DELETED] $FALLBACK_FILE (matched via basename fallback)"
+              else
+                echo "[NOT FOUND] $ENTRY (looked for: $TARGET_PATH)"
+              fi
+            fi
+          done < "$LIST"
+          
+          # Remove the droplist file itself after processing
+          rm "$LIST"
+        done
+    # 8.3. Cleanup photos folders in the public directory
+    - name: Cleanup photos folders in the public directory
+      run: |
+        echo "Searching for 'photos' folders in public/ that were copied from page bundles..."
+        
+        # Target the public directory where Hugo outputs the site
+        PUBLIC_DIR="blog/public"
+        
+        if [ ! -d "$PUBLIC_DIR" ]; then
+          echo "Error: $PUBLIC_DIR not found. Ensure this runs AFTER the Hugo build step."
+          exit 1
+        fi
+
+        # Find all index.html files (which Hugo creates from index.md) 
+        # and look for a 'photos' folder in the same output directory.
+        find "$PUBLIC_DIR" -name "index.html" | while read -r html_file; do
+          parent_dir=$(dirname "$html_file")
+          photos_dir="$parent_dir/photos"
+          
+          if [ -d "$photos_dir" ]; then
+            echo "------------------------------------------------"
+            echo "LOCATION: $photos_dir"
+            echo "ACTION: Deleting folder and all internal files..."
+            
+            # List files for the deployment log
+            find "$photos_dir" -type f -printf "DELETING: %p\n"
+            
+            # Remove the directory
+            rm -rf "$photos_dir"
+            
+            echo "SUCCESS: $photos_dir has been removed from deployment."
+          fi
+        done
+        
+    # 8.6. Legacy Format Audit
+    - name: Audit for Legacy JPG/JPEG Files in Public
+      working-directory: blog
+      run: |
+        echo "========================================================"
+        echo "AUDITING PUBLIC FOLDER FOR UNPROCESSED JPG/JPEG FILES"
+        echo "========================================================"
+        echo "Note: Files containing '_hu_' are processed and will be ignored."
+        
+        # Find jpg/jpeg files and exclude those containing '_hu_'
+        LEFTOVERS=$(find public -type f -regex '.*\.\(jpg\|jpeg\|JPG\|JPEG\)' | grep -v "_hu_" || true)
+        
+        if [ -z "$LEFTOVERS" ]; then
+          echo "Success: No unprocessed legacy JPG/JPEG files found."
+        else
+          echo "!!! WARNING: Found unprocessed legacy images in the deployment !!!"
+          echo "These files lack the '_hu_' suffix and should be converted to WebP:"
+          echo "--------------------------------------------------------"
+          echo "$LEFTOVERS"
+          echo "--------------------------------------------------------"
+          
+          # Count the files
+          COUNT=$(echo "$LEFTOVERS" | grep -c .)
+          echo "Total unprocessed legacy files found: $COUNT"
+          
+          echo ""
+          echo "Tip: These are likely static assets that bypassed your Hugo pipes."
+          echo "Check your 'static/' folder or resources that aren't being processed."
+        fi
+
+    # 9. Final Deployment Size Report
+    - name: Final Public Folder Size Summary
+      working-directory: blog
+      run: |
+        echo "========================================================"
+        echo "FINAL DEPLOYMENT SIZE REPORT"
+        echo "========================================================"
+        
+        # 1. Total size of the public folder
+        TOTAL_SIZE=$(du -sh public | cut -f1)
+        echo "TOTAL DEPLOYABLE SIZE: $TOTAL_SIZE"
+        
+        echo ""
+        echo "--- TOP 10 LARGEST DIRECTORIES ---"
+        # Shows exactly which sections of your site are taking the most space
+        du -h --max-depth=3 public | sort -hr | head -n 10
+        
+        echo ""
+        echo "--- TOP 20 LARGEST INDIVIDUAL FILES ---"
+        # Lists the specific files (likely high-res images) contributing to bloat
+        find public -type f -exec du -h {} + | sort -hr | head -n 20
+        
+        echo ""
+        # Alert if the size is approaching the 1GB limit
+        SIZE_BYTES=$(du -sb public | cut -f1)
+        LIMIT_BYTES=1073741824 # 1 GB in bytes
+        if [ "$SIZE_BYTES" -gt "$LIMIT_BYTES" ]; then
+          echo "!!! WARNING: Deployment size exceeds 1 GB limit !!!"
+        elif [ "$SIZE_BYTES" -gt 858993459 ]; then
+          echo "!!! CAUTION: Deployment size is over 800 MB (Approaching limit) !!!"
+        fi
+
+    # 8.7. Deployment Limit Audit (File Count)
+    - name: Audit File Count for Netlify Limits
+      working-directory: blog
+      run: |
+        echo "========================================================"
+        echo "AUDITING FILE COUNT FOR NETLIFY PAGES LIMITS"
+        echo "========================================================"
+        
+        # Count all files in the public directory recursively
+        # -type f ensures we only count files, not directories
+        FILE_COUNT=$(find public -type f | wc -l)
+        LIMIT=20000
+        THRESHOLD=10000
+        
+        echo "Total files found in public/: $FILE_COUNT"
+        
+        if [ "$FILE_COUNT" -gt "$LIMIT" ]; then
+          echo "::error::CRITICAL: File count ($FILE_COUNT) exceeds Netlify Free Plan limit ($LIMIT)!"
+          echo "Deployment is likely to fail unless you are on a Paid Plan with Wrangler v4 enabled."
+        elif [ "$FILE_COUNT" -gt "$THRESHOLD" ]; then
+          echo "::warning::CAUTION: File count ($FILE_COUNT) is over 50% of the Free Plan limit ($LIMIT)."
+          echo "Consider optimizing assets or moving large media to Netlify R2."
+        else
+          echo "Success: File count is well within limits ($((FILE_COUNT * 100 / LIMIT))% of limit used)."
+        fi
+
+    # 9. Netlify Deployment Phase & Deploy
+    - name: Echo public folder size
+      run: |
+        echo "Calculating the size of the public folder..."
+        du -sh blog/public
+
+    - name: Deploy to Netlify
+      uses: netlify/actions/cli@master
+      env:
+        NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+      with:
+        args: deploy --dir=blog/public --prod
+        # '--prod' makes it a production deploy instead of a draft/preview
+
+    # 11. CRITICAL SPACE CLEANUP
+    - name: Cleanup Netlify Build Assets
+      working-directory: blog
+      run: |
+        echo "Cleaning up public directory to free space..."
+        rm -rf public
+        echo "Cleanup complete. Disk usage after cleanup:"
+        df -h
