@@ -155,17 +155,22 @@ jobs:
         # Install CLIs here. Since Node is set up, this should work.
 
     # 6. Unified Modification for All Image Widths (Shortcodes & Markup)
-    - name: Modify All Image Logic for Netlify Widths
+
+    - name: Modify All Image Logic for Netlify & ImageKit Widths
       working-directory: blog
       run: |
-        # This should contain your Netlify-specific slice, e.g., 'slice 640 1200'
-        NEW_TEXT='${{ vars.NETLIFY_IMAGE_WIDTHS }}'
-        # The default slice currently in your local files
+        # 1. Native Hugo Widths (Integers)
         OLD_TEXT='slice 640 1024 1600 2048 2560'
+        NEW_TEXT='${{ vars.NETLIFY_IMAGE_WIDTHS }}'
         
-        echo "Target Netlify Widths: $NEW_TEXT"
+        # 2. ImageKit Widths (Quoted Strings)
+        OLD_TEXT_IMAGEKIT='slice "640" "1024" "1600" "2048" "2560"'
+        NEW_TEXT_IMAGEKIT='${{ vars.NETLIFY_IMAGE_WIDTHS_IMAGEKIT }}'
+        
+        echo "Replacing Native with: $NEW_TEXT"
+        echo "Replacing ImageKit with: $NEW_TEXT_IMAGEKIT"
 
-        # Dynamically find all 4 target files
+        # Dynamically find the 4 target files
         FILES_TO_EDIT=(
           "$(find . -path "*/shortcodes/responsiveImage.html" -type f | head -n 1)"
           "$(find . -path "*/shortcodes/carouselImage.html" -type f | head -n 1)"
@@ -178,19 +183,23 @@ jobs:
             echo "========================================================"
             echo "Processing: $FILE_PATH"
             
-            # Check if OLD_TEXT exists
+            # Replace Native Hugo slices
             if grep -q "$OLD_TEXT" "$FILE_PATH"; then
-              echo "Success: Found '$OLD_TEXT'. Performing replacement..."
-              sed -i "s|${OLD_TEXT}|${NEW_TEXT}|g" "$FILE_PATH"
-            else
-              echo "::warning file=$FILE_PATH::Target '$OLD_TEXT' not found. Skipping replacement."
+              echo "Found Native slice. Replacing..."
+              sed -i "s|$OLD_TEXT|$NEW_TEXT|g" "$FILE_PATH"
+            fi
+
+            # Replace ImageKit slices (Handles the quoted strings)
+            if grep -q "$OLD_TEXT_IMAGEKIT" "$FILE_PATH"; then
+              echo "Found ImageKit slice. Replacing..."
+              sed -i "s|$OLD_TEXT_IMAGEKIT|$NEW_TEXT_IMAGEKIT|g" "$FILE_PATH"
             fi
             
-            echo "--- Current State ---"
-            # Append || true to prevent exit code 1 from failing the build
-            grep "${NEW_TEXT}" "$FILE_PATH" || echo "Note: '${NEW_TEXT}' is not present in this file."
+            echo "--- Verification ---"
+            grep -E "slice.*$|${NEW_TEXT}|${NEW_TEXT_IMAGEKIT}" "$FILE_PATH" | grep "slice" || true
           fi
         done
+        
         
     - name: Batch Update Image Widths to Netlify Settings
       working-directory: blog
