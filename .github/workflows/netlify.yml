@@ -488,11 +488,12 @@ jobs:
         du -sh blog/public
 
     - name: Netlify Deployment
-      run: |
-        # Use --site flag with the Site ID directly
-        netlify deploy --prod --dir blog/public --site "${{ secrets.NETLIFY_SITE_ID }}"
       env:
-        NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ACCESS_TOKEN }}
+        NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      run: |
+        echo "Running deployment using local project binaries..."
+        # Using npx allows you to run the CLI without a slow global npm install -g
+        npx -p netlify-cli netlify deploy --prod --dir=blog/public --site="${{ secrets.NETLIFY_SITE_ID }}"
   
     # 11. CRITICAL SPACE CLEANUP
     - name: Cleanup Netlify Build Assets
