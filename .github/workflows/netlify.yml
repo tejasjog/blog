@@ -66,72 +66,54 @@ jobs:
         sudo apt-get clean
         sudo rm -rf /var/lib/apt/lists/*
         
-  # 1. Early Checkout of Meta-Configuration Only (Bypasses Submodule Blowup)
-    - name: Partial Checkout & Fast Submodule Pruning
+    # 1. Checkout Code from GitLab
+    - name: Checkout Code with Submodule Authentication
       env:
         GIT_OAUTH_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
       run: |
-        echo "Configuring global Git credentials..."
         git config --global url."https://oauth2:$GIT_OAUTH_TOKEN@gitlab.com".insteadOf "https://gitlab.com"
-        
-        echo "Cloning primary repository root structures..."
-        git clone --depth 1 --no-recurse-submodules https://gitlab.com/tejasjog/blog.git
-        
+        git clone --depth 1 https://gitlab.com/tejasjog/blog.git
+        cd blog
+
+    # 2. Run Submodule Update and Cleanup .git files
+    - name: Update Submodules and Cleanup Content Directories
+      working-directory: blog
+      run: |
+        echo "Attempting to update submodules..."
+        git submodule update --init --force --recursive --remote --verbose --depth 1
+
+        echo "Total files in repository (excluding .git):"
+        find . -path ./.git -prune -o -type f -print | wc -l
+
+    # 2.5. Conditional Submodule Pruning
+    - name: Prune Submodules (Keep only 2007 and 2013)
+      working-directory: blog
+      run: |
         echo "========================================================"
         echo "NETLIFY_KEEP_ONLY_SELECTED_YEARS: ${{ vars.NETLIFY_KEEP_ONLY_SELECTED_YEARS || 'false' }}"
         echo "========================================================"
         
-        cd blog
+        # Only proceed if the variable is explicitly set to 'true'
         if [ "${{ vars.NETLIFY_KEEP_ONLY_SELECTED_YEARS }}" = "true" ]; then
-          echo "Pruning .gitmodules configuration to retain PaperMod and ONLY 2017/2013 content..."
+          echo "Pruning content to keep only 2017 and 2013 submodules..."
           
-          if [ -f ".gitmodules" ]; then
-            # 1. Back up the original configuration
-            cp .gitmodules .gitmodules.bak
+          # Target the directory where your year-based submodules are located
+          TARGET_DIR="content/posts" 
+          
+          if [ -d "$TARGET_DIR" ]; then
+            cd "$TARGET_DIR"
+            # Find all directories, then filter out current directory (.), 2017, and 2013
+            # Everything else is removed to speed up the Hugo build.
+            find . -maxdepth 1 -type d ! -name "." ! -name "2017" ! -name "2013" -exec rm -rf {} +
             
-            # 2. FIXED: Escaped the [ to \[ in the Record Separator (RS) regex
-            awk '
-              BEGIN { RS="\\[submodule"; ORS="" }
-              NR==1 { print $0; next }
-              /path = (content\/posts\/(2013|2017)|themes\/PaperMod)/ { print "[submodule" $0 }
-            ' .gitmodules.bak > .gitmodules
-            
-            echo "--- Cleaned .gitmodules Configuration ---"
-            cat .gitmodules
+            echo "Remaining directories in $TARGET_DIR:"
+            ls -F
           else
-            echo "::warning::.gitmodules file not found at project root."
+            echo "::warning::Target directory $TARGET_DIR not found. Skipping pruning."
           fi
         else
-          echo "Pruning bypassed via variable state flag. All submodules remain active."
+          echo "Pruning skipped. All years will be included in the build."
         fi
-
-    - name: Run Targeted Submodule Checkout
-      working-directory: blog
-      run: |
-        echo "De-registering pruned submodules from local Git index cache..."
-        if [ -f ".gitmodules.bak" ]; then
-          git config --file .gitmodules.bak --get-regexp path | awk '{print $2}' | while read -r sub_path; do
-            if ! grep -q "path = $sub_path" .gitmodules; then
-              echo "Purging detached cache index mapping for: $sub_path"
-              
-              # FIXED: Use low-level plumbing to bypass the .gitmodules state validation check
-              git update-index --force-remove "$sub_path" || true
-              rm -rf ".git/modules/$sub_path" || true
-              
-              # Clear Git configuration registry records for this section
-              git config --remove-section "submodule.$sub_path" 2>/dev/null || true
-            fi
-          done
-        fi
-
-        echo "Synchronizing whitelisted submodule definitions..."
-        git submodule sync
-        
-        echo "Cloning safe content streams recursively..."
-        git submodule update --init --force --recursive --verbose --depth 1
-
-        echo "Total active asset footprint remaining on disk (excluding tracking manifests):"
-        find . -path ./.git -prune -o -type f -print | wc -l
         
     # 3. Optimized Node.js Setup
     - name: Set up Node.js Environment
@@ -173,7 +155,7 @@ jobs:
         # Install CLIs here. Since Node is set up, this should work.
 
     # 6. Unified Modification for All Image Widths (Shortcodes & Markup)
-
+    
     - name: Modify All Image Logic for Netlify & ImageKit Widths
       working-directory: blog
       run: |
@@ -217,7 +199,6 @@ jobs:
             grep -E "slice.*$|${NEW_TEXT}|${NEW_TEXT_IMAGEKIT}" "$FILE_PATH" | grep "slice" || true
           fi
         done
-        
         
     - name: Batch Update Image Widths to Netlify Settings
       working-directory: blog
@@ -288,13 +269,6 @@ jobs:
       working-directory: blog
       run: |
         echo "Updating ImageKit parameters in hugo.yaml based on environment variables..."
-
-        if grep -q "imageKitID:" hugo.yaml; then
-          echo "Found imageKitID parameter. Updating..."
-          sed -i "s|imageKitID: .*|imageKitID: ${{ vars.NETLIFY_IMAGEKITID }}|g" hugo.yaml
-        else
-          echo "::warning::imageKitID parameter not found in hugo.yaml!"
-        fi
         
         # Define the target parameters and their corresponding GitHub Vars
         # Use 'true' or 'false' in your GitHub Repository Variables
@@ -520,7 +494,7 @@ jobs:
         echo "Running deployment using local project binaries..."
         # Let Netlify naturally pick up the token from the env block above
         npx -p netlify-cli netlify deploy --prod --dir=blog/public --site=${{ secrets.NETLIFY_SITE_ID }}
-
+  
     # 11. CRITICAL SPACE CLEANUP
     - name: Cleanup Netlify Build Assets
       working-directory: blog
