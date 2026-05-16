@@ -478,11 +478,14 @@ jobs:
         du -sh blog/public
 
     - name: Netlify Deployment
+      env:
+        # This maps your GitHub secret to the environment variable Netlify expects
+        NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ACCESS_TOKEN }}
       run: |
         echo "Running deployment using local project binaries..."
-        # Pass the variables directly without inner quotes, and append the explicit --auth flag
-        npx -p netlify-cli netlify deploy --prod --dir=blog/public --site=${{ secrets.NETLIFY_SITE_ID }} --auth=${{ secrets.NETLIFY_AUTH_TOKEN }}
-
+        # Let Netlify naturally pick up the token from the env block above
+        npx -p netlify-cli netlify deploy --prod --dir=blog/public --site=${{ secrets.NETLIFY_SITE_ID }}
+        
     # 11. CRITICAL SPACE CLEANUP
     - name: Cleanup Netlify Build Assets
       working-directory: blog
