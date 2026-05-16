@@ -66,54 +66,58 @@ jobs:
         sudo apt-get clean
         sudo rm -rf /var/lib/apt/lists/*
         
-    # 1. Checkout Code from GitLab
-    - name: Checkout Code with Submodule Authentication
+    # 1. Early Checkout of Meta-Configuration Only (Bypasses Submodule Blowup)
+    - name: Partial Checkout & Fast Submodule Pruning
       env:
         GIT_OAUTH_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
       run: |
+        echo "Configuring global Git credentials..."
         git config --global url."https://oauth2:$GIT_OAUTH_TOKEN@gitlab.com".insteadOf "https://gitlab.com"
-        git clone --depth 1 https://gitlab.com/tejasjog/blog.git
-        cd blog
-
-    # 2. Run Submodule Update and Cleanup .git files
-    - name: Update Submodules and Cleanup Content Directories
-      working-directory: blog
-      run: |
-        echo "Attempting to update submodules..."
-        git submodule update --init --force --recursive --remote --verbose --depth 1
-
-        echo "Total files in repository (excluding .git):"
-        find . -path ./.git -prune -o -type f -print | wc -l
-
-    # 2.5. Conditional Submodule Pruning
-    - name: Prune Submodules (Keep only 2007 and 2013)
-      working-directory: blog
-      run: |
+        
+        echo "Cloning primary repository root structures..."
+        # Clones only the root configuration files without checking out submodules yet
+        git clone --depth 1 --no-recurse-submodules https://gitlab.com/tejasjog/blog.git
+        
         echo "========================================================"
         echo "NETLIFY_KEEP_ONLY_SELECTED_YEARS: ${{ vars.NETLIFY_KEEP_ONLY_SELECTED_YEARS || 'false' }}"
         echo "========================================================"
         
-        # Only proceed if the variable is explicitly set to 'true'
+        cd blog
         if [ "${{ vars.NETLIFY_KEEP_ONLY_SELECTED_YEARS }}" = "true" ]; then
-          echo "Pruning content to keep only 2017 and 2013 submodules..."
+          echo "Pruning .gitmodules configuration to retain PaperMod and ONLY 2017/2013 content..."
           
-          # Target the directory where your year-based submodules are located
-          TARGET_DIR="content/posts" 
-          
-          if [ -d "$TARGET_DIR" ]; then
-            cd "$TARGET_DIR"
-            # Find all directories, then filter out current directory (.), 2017, and 2013
-            # Everything else is removed to speed up the Hugo build.
-            find . -maxdepth 1 -type d ! -name "." ! -name "2017" ! -name "2013" -exec rm -rf {} +
+          if [ -f ".gitmodules" ]; then
+            # 1. Back up the original configuration
+            cp .gitmodules .gitmodules.bak
             
-            echo "Remaining directories in $TARGET_DIR:"
-            ls -F
+            # 2. Updated awk script: Whitelists 2013, 2017, AND themes/PaperMod paths
+            awk '
+              BEGIN { RS="[submodule"; ORS="" }
+              NR==1 { print $0; next }
+              /path = (content\/posts\/(2013|2017)|themes\/PaperMod)/ { print "[submodule" $0 }
+            ' .gitmodules.bak > .gitmodules
+            
+            echo "--- Cleaned .gitmodules Configuration ---"
+            cat .gitmodules
           else
-            echo "::warning::Target directory $TARGET_DIR not found. Skipping pruning."
+            echo "::warning::.gitmodules file not found at project root."
           fi
         else
-          echo "Pruning skipped. All years will be included in the build."
+          echo "Pruning bypassed via variable state flag. All submodules remain active."
         fi
+
+    # 2. Secure Deep-Clone of Whitelisted Content Packages Only
+    - name: Run Targeted Submodule Checkout
+      working-directory: blog
+      run: |
+        echo "Synchronizing whitelisted submodule definitions..."
+        git submodule sync
+        
+        echo "Cloning safe content streams recursively..."
+        git submodule update --init --force --recursive --verbose --depth 1
+
+        echo "Total active asset footprint remaining on disk (excluding tracking manifests):"
+        find . -path ./.git -prune -o -type f -print | wc -l
         
     # 3. Optimized Node.js Setup
     - name: Set up Node.js Environment
