@@ -109,25 +109,22 @@ jobs:
       working-directory: blog
       run: |
         echo "De-registering pruned submodules from local Git index cache..."
-        # Extract all submodules originally registered using git config against the backup file
         if [ -f ".gitmodules.bak" ]; then
           git config --file .gitmodules.bak --get-regexp path | awk '{print $2}' | while read -r sub_path; do
-            # If the path was dropped from our active .gitmodules, purge it forcefully
             if ! grep -q "path = $sub_path" .gitmodules; then
               echo "Purging detached cache index mapping for: $sub_path"
               
-              # Use structural lower-level git commands to avoid configuration syntax loops
-              git rm --cached "$sub_path" || true
+              # FIXED: Use low-level plumbing to bypass the .gitmodules state validation check
+              git update-index --force-remove "$sub_path" || true
               rm -rf ".git/modules/$sub_path" || true
               
-              # Clear out Git's local configuration registry block for this module path
+              # Clear Git configuration registry records for this section
               git config --remove-section "submodule.$sub_path" 2>/dev/null || true
             fi
           done
         fi
 
         echo "Synchronizing whitelisted submodule definitions..."
-        # Sync will now execute cleanly since conflicting indexes have been removed
         git submodule sync
         
         echo "Cloning safe content streams recursively..."
