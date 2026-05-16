@@ -66,7 +66,7 @@ jobs:
         sudo apt-get clean
         sudo rm -rf /var/lib/apt/lists/*
         
-    # 1. Early Checkout of Meta-Configuration Only (Bypasses Submodule Blowup)
+  # 1. Early Checkout of Meta-Configuration Only (Bypasses Submodule Blowup)
     - name: Partial Checkout & Fast Submodule Pruning
       env:
         GIT_OAUTH_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
@@ -75,7 +75,6 @@ jobs:
         git config --global url."https://oauth2:$GIT_OAUTH_TOKEN@gitlab.com".insteadOf "https://gitlab.com"
         
         echo "Cloning primary repository root structures..."
-        # Clones only the root configuration files without checking out submodules yet
         git clone --depth 1 --no-recurse-submodules https://gitlab.com/tejasjog/blog.git
         
         echo "========================================================"
@@ -90,9 +89,9 @@ jobs:
             # 1. Back up the original configuration
             cp .gitmodules .gitmodules.bak
             
-            # 2. Updated awk script: Whitelists 2013, 2017, AND themes/PaperMod paths
+            # 2. FIXED: Escaped the [ to \[ in the Record Separator (RS) regex
             awk '
-              BEGIN { RS="[submodule"; ORS="" }
+              BEGIN { RS="\\[submodule"; ORS="" }
               NR==1 { print $0; next }
               /path = (content\/posts\/(2013|2017)|themes\/PaperMod)/ { print "[submodule" $0 }
             ' .gitmodules.bak > .gitmodules
@@ -105,19 +104,6 @@ jobs:
         else
           echo "Pruning bypassed via variable state flag. All submodules remain active."
         fi
-
-    # 2. Secure Deep-Clone of Whitelisted Content Packages Only
-    - name: Run Targeted Submodule Checkout
-      working-directory: blog
-      run: |
-        echo "Synchronizing whitelisted submodule definitions..."
-        git submodule sync
-        
-        echo "Cloning safe content streams recursively..."
-        git submodule update --init --force --recursive --verbose --depth 1
-
-        echo "Total active asset footprint remaining on disk (excluding tracking manifests):"
-        find . -path ./.git -prune -o -type f -print | wc -l
         
     # 3. Optimized Node.js Setup
     - name: Set up Node.js Environment
