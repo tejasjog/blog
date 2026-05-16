@@ -104,6 +104,18 @@ jobs:
         else
           echo "Pruning bypassed via variable state flag. All submodules remain active."
         fi
+
+    - name: Run Targeted Submodule Checkout
+      working-directory: blog
+      run: |
+        echo "Synchronizing whitelisted submodule definitions..."
+        git submodule sync
+        
+        echo "Cloning safe content streams recursively..."
+        git submodule update --init --force --recursive --verbose --depth 1
+
+        echo "Total active asset footprint remaining on disk (excluding tracking manifests):"
+        find . -path ./.git -prune -o -type f -print | wc -l
         
     # 3. Optimized Node.js Setup
     - name: Set up Node.js Environment
