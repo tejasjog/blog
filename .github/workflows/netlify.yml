@@ -111,7 +111,19 @@ jobs:
         echo "Synchronizing whitelisted submodule definitions..."
         git submodule sync
         
+        echo "De-registering pruned submodules from local Git index cache..."
+        # This matches all submodules currently cached in git index that were removed from .gitmodules
+        # and forcefully un-tracks them so git update doesn't panic.
+        git submodule status | awk '{print $2}' | while read -r sub_path; do
+          if ! grep -q "path = $sub_path" .gitmodules; then
+            echo "Purging detached cache index mapping for: $sub_path"
+            git rm --cached "$sub_path" || true
+            rm -rf ".git/modules/$sub_path" || true
+          fi
+        done
+
         echo "Cloning safe content streams recursively..."
+        # Now git only attempts to checkout what actually exists in your modified .gitmodules file
         git submodule update --init --force --recursive --verbose --depth 1
 
         echo "Total active asset footprint remaining on disk (excluding tracking manifests):"
