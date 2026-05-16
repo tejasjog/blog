@@ -484,8 +484,7 @@ jobs:
       run: |
         echo "Running deployment using local project binaries..."
         # Let Netlify naturally pick up the token from the env block above
-        npx -p netlify-cli netlify deploy --prod --dir=blog/public --site=${{ secrets.NETLIFY_SITE_ID }}
-        
+        npx -p netlify-cli netlify deploy --prod --dir public --site ${{ secrets.NETLIFY_SITE_ID }}
     # 11. CRITICAL SPACE CLEANUP
     - name: Cleanup Netlify Build Assets
       working-directory: blog
