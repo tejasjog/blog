@@ -90,11 +90,11 @@ jobs:
       working-directory: blog
       run: |
         echo "========================================================"
-        echo "KEEP_ONLY_SELECTED_YEARS: ${{ vars.KEEP_ONLY_SELECTED_YEARS || 'false' }}"
+        echo "CLOUDFLARE_KEEP_ONLY_SELECTED_YEARS: ${{ vars.CLOUDFLARE_KEEP_ONLY_SELECTED_YEARS || 'false' }}"
         echo "========================================================"
         
         # Only proceed if the variable is explicitly set to 'true'
-        if [ "${{ vars.KEEP_ONLY_SELECTED_YEARS }}" = "true" ]; then
+        if [ "${{ vars.CLOUDFLARE_KEEP_ONLY_SELECTED_YEARS }}" = "true" ]; then
           echo "Pruning content to keep only 2017 and 2013 submodules..."
           
           # Target the directory where your year-based submodules are located
