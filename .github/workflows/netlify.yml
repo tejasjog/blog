@@ -487,17 +487,13 @@ jobs:
         echo "Calculating the size of the public folder..."
         du -sh blog/public
 
-    - name: Deploy to Netlify
+    - name: Netlify Deployment
+      run: |
+        # Use --site flag with the Site ID directly
+        netlify deploy --prod --dir blog/public --site "${{ secrets.NETLIFY_SITE_ID }}"
       env:
         NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ACCESS_TOKEN }}
-        NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-      run: |
-        echo "Installing Netlify CLI locally..."
-        npm install -g netlify-cli
-        
-        echo "Deploying production build..."
-        netlify deploy --dir=blog/public --prod
-
+  
     # 11. CRITICAL SPACE CLEANUP
     - name: Cleanup Netlify Build Assets
       working-directory: blog
