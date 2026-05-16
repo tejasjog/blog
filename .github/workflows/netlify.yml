@@ -488,13 +488,16 @@ jobs:
         du -sh blog/public
 
     - name: Deploy to Netlify
-      uses: netlify/actions/cli@master
+      working-directory: blog
       env:
         NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-      with:
-        args: deploy --dir=blog/public --prod
-        # '--prod' makes it a production deploy instead of a draft/preview
+      run: |
+        echo "Installing Netlify CLI locally..."
+        npm install -g netlify-cli
+        
+        echo "Deploying production build..."
+        netlify deploy --dir=public --prod
 
     # 11. CRITICAL SPACE CLEANUP
     - name: Cleanup Netlify Build Assets
