@@ -288,6 +288,13 @@ jobs:
       working-directory: blog
       run: |
         echo "Updating ImageKit parameters in hugo.yaml based on environment variables..."
+
+        if grep -q "imageKitID:" hugo.yaml; then
+          echo "Found imageKitID parameter. Updating..."
+          sed -i "s/imageKitID: .*/imageKitID: ${{ vars.NETLIFY_IMAGEKITID }}/g" hugo.yaml
+        else
+          echo "::warning::imageKitID parameter not found in hugo.yaml!"
+        fi
         
         # Define the target parameters and their corresponding GitHub Vars
         # Use 'true' or 'false' in your GitHub Repository Variables
