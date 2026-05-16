@@ -291,7 +291,7 @@ jobs:
 
         if grep -q "imageKitID:" hugo.yaml; then
           echo "Found imageKitID parameter. Updating..."
-          sed -i "s/imageKitID: .*/imageKitID: ${{ vars.NETLIFY_IMAGEKITID }}/g" hugo.yaml
+          sed -i "s|imageKitID: .*|imageKitID: ${{ vars.NETLIFY_IMAGEKITID }}|g" hugo.yaml
         else
           echo "::warning::imageKitID parameter not found in hugo.yaml!"
         fi
