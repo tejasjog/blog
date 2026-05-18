@@ -1,8 +1,8 @@
 import { parseStringPromise } from 'xml2js';
 import { JSDOM } from 'jsdom';
 
-const SITEMAP_URL = 'https://tejasjog-blog.pages.dev/sitemap.xml';
-const ALLOWED_DOMAINS = ['cloudflare.com', 'imagekit.io', 'tejasjog-blog.pages.dev'];
+const SITEMAP_URL = 'https://blog.tejasjog.in/sitemap.xml';
+const ALLOWED_DOMAINS = ['cloudflare.com', 'imagekit.io', 'blog.tejasjog.in'];
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif', '.svg'];
 
 async function warmUp() {
