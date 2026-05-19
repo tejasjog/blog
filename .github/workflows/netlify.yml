@@ -272,7 +272,8 @@ jobs:
         echo "Updating imageKitID in hugo.yaml based on environment variables..."
         
         # Replaces the hardcoded imageKitID with the GitHub Repository Variable
-        sed -i "s/imageKitID: .*/imageKitID: ${{ vars.NETLIFY_IMAGEKITID }}/g" hugo.yaml
+        # Using pipes (|) instead of slashes (/) avoids conflicts with URLs or paths
+        sed -i "s|imageKitID: .*|imageKitID: ${{ vars.NETLIFY_IMAGEKITID }}|g" hugo.yaml
         
         echo "--- hugo.yaml ImageKit ID Configuration ---"
         grep "imageKitID" hugo.yaml
