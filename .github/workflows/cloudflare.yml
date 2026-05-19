@@ -268,6 +268,15 @@ jobs:
     - name: Configure ImageKit Parameters in hugo.yaml
       working-directory: blog
       run: |
+
+        echo "Updating imageKitID in hugo.yaml based on environment variables..."
+        
+        # Replaces the hardcoded imageKitID with the GitHub Repository Variable
+        sed -i "s/imageKitID: .*/imageKitID: ${{ vars.CLOUDFLARE_IMAGEKITID }}/g" hugo.yaml
+        
+        echo "--- hugo.yaml ImageKit ID Configuration ---"
+        grep "imageKitID" hugo.yaml
+      
         echo "Updating ImageKit parameters in hugo.yaml based on environment variables..."
         
         # Define the target parameters and their corresponding GitHub Vars
