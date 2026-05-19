@@ -156,16 +156,16 @@ jobs:
 
     # 6. Unified Modification for All Image Widths (Shortcodes & Markup)
     
-    - name: Modify All Image Logic for Netlify & ImageKit Widths
+    - name: Modify All Image Logic for Cloudflare & ImageKit Widths
       working-directory: blog
       run: |
         # 1. Native Hugo Widths (Integers)
         OLD_TEXT='slice 640 1024 1600 2048 2560'
-        NEW_TEXT='${{ vars.NETLIFY_IMAGE_WIDTHS }}'
+        NEW_TEXT='${{ vars.CLOUDFLARE_IMAGE_WIDTHS }}'
         
         # 2. ImageKit Widths (Quoted Strings)
         OLD_TEXT_IMAGEKIT='slice "640" "1024" "1600" "2048" "2560"'
-        NEW_TEXT_IMAGEKIT='${{ vars.NETLIFY_IMAGE_WIDTHS_IMAGEKIT }}'
+        NEW_TEXT_IMAGEKIT='${{ vars.CLOUDFLARE_IMAGE_WIDTHS_IMAGEKIT }}'
         
         echo "Replacing Native with: $NEW_TEXT"
         echo "Replacing ImageKit with: $NEW_TEXT_IMAGEKIT"
