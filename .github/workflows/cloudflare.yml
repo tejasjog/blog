@@ -121,12 +121,12 @@ jobs:
       with:
         node-version: ${{ env.NODE_VERSION }}
 
-    # 4. Install Brotli, Dart Sass, and Hugo (Manual install with immediate cleanup)
+    # 4. Install Brotli, Dart Sass, Hugo, and ExifTool (Manual install with immediate cleanup)
     - name: Install Dependencies with Cleanup
       run: |
-        echo "Installing system dependencies: brotli, Dart Sass, and Hugo..."
+        echo "Installing system dependencies: brotli, Dart Sass, Hugo, and ExifTool..."
         sudo apt-get update
-        sudo apt-get install -y brotli
+        sudo apt-get install -y brotli libimage-exiftool-perl
 
         # Install Dart Sass
         DART_SASS_FILENAME="dart-sass-${{ env.DART_SASS_VERSION }}-linux-x64.tar.gz"
@@ -321,6 +321,7 @@ jobs:
         rm -rf .git
         # If you have a themes folder with its own .git, remove those too
         find . -name ".git" -type d -exec rm -rf {} +
+
   
   # 8. Cleanup .droplist Files (Source & Public) - Improved Path Handling
     - name: Cleanup .droplist Files and Report Deletions
@@ -368,6 +369,7 @@ jobs:
           # Remove the droplist file itself after processing
           rm "$LIST"
         done
+    
     # 8.3. Cleanup photos folders in the public directory
     - name: Cleanup photos folders in the public directory
       run: |
@@ -401,7 +403,23 @@ jobs:
             echo "SUCCESS: $photos_dir has been removed from deployment."
           fi
         done
+
+    # 8.5. Apply EXIF, IPTC, and XMP Metadata to Processed Images
+    - name: Inject Copyright and Metadata into Output Images
+      working-directory: blog
+      run: |
+        echo "Injecting EXIF, IPTC, and XMP copyright metadata..."
+        exiftool -overwrite_original -recurse \
+          -Artist="Tejas Jog" \
+          -Copyright="Copyright © $(date +%Y) Tejas Jog. All rights reserved." \
+          -IPTC:By-line="Tejas Jog" \
+          -IPTC:CopyrightNotice="Copyright © $(date +%Y) Tejas Jog" \
+          -XMP-dc:Rights="Copyright © $(date +%Y) Tejas Jog" \
+          -XMP-dc:Creator="Tejas Jog" \
+          public/
         
+        echo "Metadata successfully applied to images in public/ folder."
+
     # 8.6. Legacy Format Audit
     - name: Audit for Legacy JPG/JPEG Files in Public
       working-directory: blog
