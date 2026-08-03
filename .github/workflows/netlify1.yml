@@ -1,0 +1,48 @@
+name: Deploy Single File from GitLab to Netlify
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      # 1. Clone the GitLab repository (Directly, bypassing actions/checkout limitations)
+      - name: Clone GitLab Repository
+        env:
+          GL_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
+        run: |
+          git clone --depth 1 "https://oauth2:${GL_TOKEN}@gitlab.com/tejasjog/blog.git" gitlab-content
+
+      # 2. Prepare the deployment folder
+      - name: Prepare Files
+        run: |
+          mkdir -p staging
+          
+          # Path verified from your structure: gitlab-content/netlify.app/index.html
+          TARGET="gitlab-content/netlify.app/index.html"
+          
+          if [ -f "$TARGET" ]; then
+            cp "$TARGET" staging/index.html
+            echo "Successfully found and copied index.html for Netlify"
+          else
+            echo "ERROR: File $TARGET not found!"
+            echo "Current structure for debugging:"
+            ls -R gitlab-content
+            exit 1
+          fi
+
+      # 3. Install Netlify CLI
+      - name: Install Netlify CLI
+        run: npm install -g netlify-cli
+
+      # 4. Deploy to Netlify
+      # Using the 'staging' folder as the source directory
+      - name: Netlify Deployment
+        run: |
+          netlify deploy --prod --dir staging --site ${{ secrets.NETLIFY_SITE_ID }}
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ACCESS_TOKEN }}
