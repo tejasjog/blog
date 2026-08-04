@@ -409,7 +409,9 @@ jobs:
       working-directory: blog
       run: |
         echo "Injecting EXIF, IPTC, and XMP copyright metadata..."
+        # -ext restricts execution strictly to valid web image types
         exiftool -overwrite_original -recurse \
+          -ext jpg -ext jpeg -ext webp \
           -Artist="Tejas Jog" \
           -Copyright="Copyright © $(date +%Y) Tejas Jog. All rights reserved." \
           -IPTC:By-line="Tejas Jog" \
