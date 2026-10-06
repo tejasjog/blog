@@ -412,32 +412,43 @@ jobs:
         # Extract author/copyright owner from hugo.yaml using yq (falls back to "Tejas Jog" if not set)
         OWNER=$(yq eval '.params.copyright || .copyright || .params.author || .author // "Tejas Jog"' hugo.yaml 2>/dev/null || echo "Tejas Jog")
         CURRENT_YEAR=$(date +%Y)
+        NPROC=$(nproc || echo 4)
 
-        echo "Injecting metadata using owner: '$OWNER'..."
+        echo "Injecting metadata using owner: '$OWNER' across $NPROC parallel workers..."
 
-        # Find all target web images (jpg, jpeg, webp, png) inside public/ and process them individually
-        find public -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.webp" -o -iname "*.png" \) | while read -r img; do
+        process_image() {
+          local img="$1"
+          local owner="$2"
+          local cur_year="$3"
+
           # Extract year matching /19xx/ or /20xx/ from the file path
-          YEAR=$(echo "$img" | grep -oE '/(19|20)[0-9]{2}(/|$)' | head -n 1 | grep -oE '(19|20)[0-9]{2}')
+          local year
+          year=$(echo "$img" | grep -oE '/(19|20)[0-9]{2}(/|$)' | head -n 1 | grep -oE '(19|20)[0-9]{2}')
 
           # Fallback to current year if no year found in path
-          if [ -z "$YEAR" ]; then
-            YEAR="$CURRENT_YEAR"
+          if [ -z "$year" ]; then
+            year="$cur_year"
           fi
 
-          RIGHTS_STRING="© ${YEAR} ${OWNER}"
-          FULL_COPYRIGHT_STRING="Copyright © ${YEAR} ${OWNER}. All rights reserved."
+          local rights_string="© ${year} ${owner}"
+          local full_copyright_string="Copyright © ${year} ${owner}. All rights reserved."
 
-          exiftool -overwrite_original \
+          exiftool -overwrite_original -q \
             -ColorSpace="sRGB" \
-            -Artist="$OWNER" \
-            -Copyright="$FULL_COPYRIGHT_STRING" \
-            -IPTC:By-line="$OWNER" \
-            -IPTC:CopyrightNotice="$RIGHTS_STRING" \
-            -XMP-dc:Rights="$RIGHTS_STRING" \
-            -XMP-dc:Creator="$OWNER" \
+            -Artist="$owner" \
+            -Copyright="$full_copyright_string" \
+            -IPTC:By-line="$owner" \
+            -IPTC:CopyrightNotice="$rights_string" \
+            -XMP-dc:Rights="$rights_string" \
+            -XMP-dc:Creator="$owner" \
             "$img"
-        done
+        }
+
+        export -f process_image
+
+        # Find all target web images (jpg, jpeg, webp, png) inside public/ and process in parallel
+        find public -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.webp" -o -iname "*.png" \) -print0 \
+          | xargs -0 -n 1 -P "$NPROC" bash -c 'process_image "$0" "$@"' "$OWNER" "$CURRENT_YEAR"
 
         echo "Metadata successfully applied to images in public/ folder."
 
