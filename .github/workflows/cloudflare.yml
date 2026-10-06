@@ -421,6 +421,9 @@ jobs:
           local owner="$2"
           local cur_year="$3"
 
+          # Visual verification: prints current worker process ID (PID)
+          echo "[Worker PID $$] Processing: $img"
+
           # Extract year matching /19xx/ or /20xx/ from the file path
           local year
           year=$(echo "$img" | grep -oE '/(19|20)[0-9]{2}(/|$)' | head -n 1 | grep -oE '(19|20)[0-9]{2}')
@@ -451,7 +454,7 @@ jobs:
           | xargs -0 -n 1 -P "$NPROC" bash -c 'process_image "$0" "$@"' "$OWNER" "$CURRENT_YEAR"
 
         echo "Metadata successfully applied to images in public/ folder."
-
+        
     # 8.6. Legacy Format Audit
     - name: Audit for Legacy JPG/JPEG Files in Public
       working-directory: blog
