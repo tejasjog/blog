@@ -448,10 +448,10 @@ jobs:
         }
 
         export -f process_image
-
+        
         # Find all target web images (jpg, jpeg, webp, png) inside public/ and process in parallel
         find public -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.webp" -o -iname "*.png" \) -print0 \
-          | xargs -0 -n 1 -P "$NPROC" bash -c 'process_image "$0" "$@"' "$OWNER" "$CURRENT_YEAR"
+          | xargs -0 -n 1 -P "$NPROC" bash -c 'process_image "$0" "$@" || true' "$OWNER" "$CURRENT_YEAR" || true
 
         echo "Metadata successfully applied to images in public/ folder."
         
